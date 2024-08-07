@@ -58,12 +58,6 @@ pub struct PublishOpts<'gctx> {
 
 pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
     let specs = opts.to_publish.to_package_id_specs(ws)?;
-    if specs.len() > 1 {
-        bail!("the `-p` argument must be specified to select a single package to publish")
-    }
-    if Packages::Default == opts.to_publish && ws.is_virtual() {
-        bail!("the `-p` argument must be specified in the root of a virtual workspace")
-    }
     let member_ids = ws.members().map(|p| p.package_id());
     // Check that the spec matches exactly one member.
     specs[0].query(member_ids)?;
@@ -74,15 +68,39 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         .into_iter()
         .filter(|(m, _)| specs.iter().any(|spec| spec.matches(m.package_id())))
         .collect();
-    // Double check. It is safe theoretically, unless logic has updated.
-    assert_eq!(pkgs.len(), 1);
-
-    let (pkg, cli_features) = pkgs.pop().unwrap();
 
     let mut publish_registry = match opts.reg_or_index.as_ref() {
         Some(RegistryOrIndex::Registry(registry)) => Some(registry.clone()),
         _ => None,
     };
+
+    let reg_or_index = match opts.reg_or_index.clone() {
+        Some(RegistryOrIndex::Registry(_)) | None => {
+            publish_registry.clone().map(RegistryOrIndex::Registry)
+        }
+        val => val,
+    };
+
+    ops::package(
+        ws,
+        &PackageOpts {
+            gctx: opts.gctx,
+            verify: opts.verify,
+            list: false,
+            check_metadata: true,
+            allow_dirty: opts.allow_dirty,
+            to_package: Packages::Default,
+            targets: opts.targets.clone(),
+            jobs: opts.jobs.clone(),
+            keep_going: opts.keep_going,
+            cli_features: opts.cli_features.clone(),
+            reg_or_index,
+        },
+    )?;
+
+    // TODO: Support more than one package.
+    let (pkg, cli_features) = pkgs.pop().unwrap();
+
     if let Some(ref allowed_registries) = *pkg.publish() {
         if publish_registry.is_none() && allowed_registries.len() == 1 {
             // If there is only one allowed registry, push to that one directly,
@@ -139,6 +157,7 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
     )?;
     verify_dependencies(pkg, &registry, source_ids.original)?;
 
+    // TODO: Drop this.
     // Prepare a tarball, with a non-suppressible warning if metadata
     // is missing since this is being put online.
     let tarball = ops::package_one(
@@ -181,6 +200,7 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
     opts.gctx
         .shell()
         .status("Uploading", pkg.package_id().to_string())?;
+
     transmit(
         opts.gctx,
         ws,
@@ -190,6 +210,7 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         source_ids.original,
         opts.dry_run,
     )?;
+
     if !opts.dry_run {
         const DEFAULT_TIMEOUT: u64 = 60;
         let timeout = if opts.gctx.cli_unstable().publish_timeout {

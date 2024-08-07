@@ -3489,12 +3489,73 @@ fn workspace_with_local_deps_project() -> Project {
 
 #[cargo_test]
 fn workspace_with_local_deps() {
+    let crates_io = registry::init();
     let p = workspace_with_local_deps_project();
 
     p.cargo("publish")
+        .replace_crates_io(crates_io.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
-[ERROR] the `-p` argument must be specified to select a single package to publish
+[PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[PACKAGING] level2 v0.0.1 ([ROOT]/foo/level2)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[PACKAGING] level1 v0.0.1 ([ROOT]/foo/level1)
+[UPDATING] crates.io index
+[ERROR] failed to prepare local package for uploading
+
+Caused by:
+  no matching package named `level2` found
+  location searched: registry `crates-io`
+  required by package `level1 v0.0.1 ([ROOT]/foo/level1)`
+
+"#]])
+        .run();
+}
+
+#[cargo_test]
+fn workspace_with_local_deps_nightly() {
+    let registry = RegistryBuilder::new().http_api().http_index().build();
+    let p = workspace_with_local_deps_project();
+
+    p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
+        .with_stderr_data(str![[r#"
+[PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[PACKAGING] level2 v0.0.1 ([ROOT]/foo/level2)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[PACKAGING] level1 v0.0.1 ([ROOT]/foo/level1)
+[UPDATING] crates.io index
+[PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[VERIFYING] level3 v0.0.1 ([ROOT]/foo/level3)
+[COMPILING] level3 v0.0.1 ([ROOT]/foo/target/package/level3-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[VERIFYING] level2 v0.0.1 ([ROOT]/foo/level2)
+[UPDATING] crates.io index
+[UNPACKING] level3 v0.0.1 (registry `[ROOT]/foo/target/package/tmp-registry`)
+[COMPILING] level3 v0.0.1
+[COMPILING] level2 v0.0.1 ([ROOT]/foo/target/package/level2-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[VERIFYING] level1 v0.0.1 ([ROOT]/foo/level1)
+[UPDATING] crates.io index
+[UNPACKING] level2 v0.0.1 (registry `[ROOT]/foo/target/package/tmp-registry`)
+[COMPILING] level3 v0.0.1
+[COMPILING] level2 v0.0.1
+[COMPILING] level1 v0.0.1 ([ROOT]/foo/target/package/level1-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[UPDATING] crates.io index
+[PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[VERIFYING] level3 v0.0.1 ([ROOT]/foo/level3)
+[COMPILING] level3 v0.0.1 ([ROOT]/foo/target/package/level3-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[UPLOADING] level3 v0.0.1 ([ROOT]/foo/level3)
+[UPLOADED] level3 v0.0.1 to registry `crates-io`
+[NOTE] waiting for `level3 v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
+[PUBLISHED] level3 v0.0.1 at registry `crates-io`
 
 "#]])
         .run();

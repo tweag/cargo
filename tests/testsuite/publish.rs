@@ -4,10 +4,10 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use cargo_test_support::git::{self, repo};
-use cargo_test_support::paths;
 use cargo_test_support::prelude::*;
 use cargo_test_support::registry::{self, Package, RegistryBuilder, Response};
 use cargo_test_support::{basic_manifest, project, publish, str};
+use cargo_test_support::{paths, Project};
 
 const CLEAN_FOO_JSON: &str = r#"
     {
@@ -3416,4 +3416,86 @@ You may press ctrl-c to skip waiting; the crate should be available shortly.
         .run();
 
     validate_upload_foo();
+}
+
+// A workspace with three projects that depend on one another (level1 -> level2 -> level3).
+// level1 is a binary package, to test lockfile generation.
+fn workspace_with_local_deps_project() -> Project {
+    project()
+            .file(
+                "Cargo.toml",
+                r#"
+            [workspace]
+            members = ["level1", "level2", "level3"]
+
+            [workspace.dependencies]
+            level2 = { path = "level2", version = "0.0.1" }
+        "#
+            )
+            .file(
+                "level1/Cargo.toml",
+                r#"
+            [package]
+            name = "level1"
+            version = "0.0.1"
+            edition = "2015"
+            authors = []
+            license = "MIT"
+            description = "level1"
+            repository = "bar"
+
+            [dependencies]
+            # Let one dependency also specify features, for the added test coverage when generating package files.
+            level2 = { workspace = true, features = ["foo"] }
+        "#,
+            )
+            .file("level1/src/main.rs", "fn main() {}")
+            .file(
+                "level2/Cargo.toml",
+                r#"
+            [package]
+            name = "level2"
+            version = "0.0.1"
+            edition = "2015"
+            authors = []
+            license = "MIT"
+            description = "level2"
+            repository = "bar"
+
+            [features]
+            foo = []
+
+            [dependencies]
+            level3 = { path = "../level3", version = "0.0.1" }
+        "#
+            )
+            .file("level2/src/lib.rs", "")
+            .file(
+                "level3/Cargo.toml",
+                r#"
+            [package]
+            name = "level3"
+            version = "0.0.1"
+            edition = "2015"
+            authors = []
+            license = "MIT"
+            description = "level3"
+            repository = "bar"
+        "#,
+            )
+            .file("level3/src/lib.rs", "")
+            .build()
+}
+
+#[cargo_test]
+fn workspace_with_local_deps() {
+    let p = workspace_with_local_deps_project();
+
+    p.cargo("publish")
+        .with_status(101)
+        .with_stderr_data(str![[r#"
+[ERROR] the `-p` argument must be specified to select a single package to publish
+
+"#]])
+        .run();
 }

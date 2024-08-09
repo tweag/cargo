@@ -115,6 +115,8 @@ fn publish_one(
             // even though there is no registry specified in the command.
             let default_registry = &allowed_registries[0];
             if default_registry != CRATES_IO_REGISTRY {
+                // TODO: We need this in publish_multi as well.
+
                 // Don't change the registry for crates.io and don't warn the user.
                 // crates.io will be defaulted even without this.
                 opts.gctx.shell().note(&format!(
@@ -128,6 +130,7 @@ fn publish_one(
         let reg_name = publish_registry
             .clone()
             .unwrap_or_else(|| CRATES_IO_REGISTRY.to_string());
+        // TODO: We need these error messages in publish_multi as well.
         if allowed_registries.is_empty() {
             bail!(
                 "`{}` cannot be published.\n\
@@ -314,6 +317,7 @@ fn publish_multi(
     while !outstanding.is_empty() && !timed_out {
         for pkg_id in &ready {
             let (pkg, (_features, tarball)) = &pkg_dep_graph.packages[pkg_id];
+            // TODO: Change this to one message for all in ready.
             opts.gctx.shell().status("Uploading", pkg_id.to_string())?;
 
             transmit(

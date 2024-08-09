@@ -83,6 +83,7 @@ fn check_dep_has_version(dep: &crate::core::Dependency, publish: bool) -> crate:
             || CRATES_IO_DOMAIN.to_string(),
             |registry_id| registry_id.display_registry_name(),
         );
+        // TODO: Somehow we don't get here from publish_multi. See publish_with_package_workspace_feature::path_dependency_no_version
         anyhow::bail!(
             "all dependencies must have a version specified when {}.\n\
              dependency `{}` does not specify a version\n\

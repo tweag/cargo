@@ -30,8 +30,8 @@ use crate::ops;
 use crate::ops::PackageOpts;
 use crate::ops::Packages;
 use crate::sources::source::QueryKind;
+use crate::sources::source::Source;
 use crate::sources::SourceConfigMap;
-use crate::sources::CRATES_IO_REGISTRY;
 use crate::util::auth;
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
@@ -105,14 +105,6 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         },
     )?;
 
-    // TODO: Support more than one package.
-    let (pkg, cli_features) = pkgs.pop().unwrap();
-
-    // This is only used to confirm that we can create a token before we build the package.
-    // This causes the credential provider to be called an extra time, but keeps the same order of errors.
-    let ver = pkg.version().to_string();
-    let operation = Operation::Read;
-
     let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
     let mut registry = super::registry(
         opts.gctx,
@@ -120,76 +112,89 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         opts.token.as_ref().map(Secret::as_deref),
         reg_or_index.as_ref(),
         true,
-        Some(operation).filter(|_| !opts.dry_run),
-    )?;
-    verify_dependencies(pkg, &registry, source_ids.original)?;
-
-    // TODO: Drop this.
-    // Prepare a tarball, with a non-suppressible warning if metadata
-    // is missing since this is being put online.
-    let tarball = ops::package_one(
-        ws,
-        pkg,
-        &PackageOpts {
-            gctx: opts.gctx,
-            verify: opts.verify,
-            list: false,
-            check_metadata: true,
-            allow_dirty: opts.allow_dirty,
-            to_package: Packages::Default,
-            targets: opts.targets.clone(),
-            jobs: opts.jobs.clone(),
-            keep_going: opts.keep_going,
-            cli_features,
-            reg_or_index,
-        },
+        Some(Operation::Read).filter(|_| !opts.dry_run),
     )?;
 
-    if !opts.dry_run {
-        let hash = cargo_util::Sha256::new()
-            .update_file(tarball.file())?
-            .finish_hex();
-        let operation = Operation::Publish {
-            name: pkg.name().as_str(),
-            vers: &ver,
-            cksum: &hash,
-        };
-        registry.set_token(Some(auth::auth_token(
-            &opts.gctx,
-            &source_ids.original,
-            None,
-            operation,
-            vec![],
-            false,
-        )?));
+    // Validate all the packages before publishing any of them.
+    for (pkg, (_cli_features, tarball)) in pkg_dep_graph.packages.values() {
+        // This is only used to confirm that we can create a token before we build the package.
+        // This causes the credential provider to be called an extra time, but keeps the same order of errors.
+        let ver = pkg.version().to_string();
+
+        verify_dependencies(pkg, &registry, source_ids.original)?;
+
+        if !opts.dry_run {
+            let hash = cargo_util::Sha256::new()
+                .update_file(tarball.file())?
+                .finish_hex();
+            let operation = Operation::Publish {
+                name: pkg.name().as_str(),
+                vers: &ver,
+                cksum: &hash,
+            };
+            // FIXME: we're setting the token on each package, so later tokens will override
+            // earlier ones. We could collect them all, and error if they aren't all the same?
+            // Or we could support per-package tokens.
+            registry.set_token(Some(auth::auth_token(
+                &opts.gctx,
+                &source_ids.original,
+                None,
+                operation,
+                vec![],
+                false,
+            )?));
+        }
     }
 
-    opts.gctx
-        .shell()
-        .status("Uploading", pkg.package_id().to_string())?;
+    let (mut order, mut ready) = PublishOrder::new(&pkg_dep_graph.graph);
+    let mut outstanding: HashSet<_> = ready.iter().copied().collect();
 
-    transmit(
-        opts.gctx,
-        ws,
-        pkg,
-        tarball.file(),
-        &mut registry,
-        source_ids.original,
-        opts.dry_run,
-    )?;
+    while !outstanding.is_empty() {
+        for pkg_id in &ready {
+            let (pkg, (_features, tarball)) = &pkg_dep_graph.packages[pkg_id];
+            opts.gctx.shell().status("Uploading", pkg_id.to_string())?;
 
-    if !opts.dry_run {
-        const DEFAULT_TIMEOUT: u64 = 60;
-        let timeout = if opts.gctx.cli_unstable().publish_timeout {
-            let timeout: Option<u64> = opts.gctx.get("publish.timeout")?;
-            timeout.unwrap_or(DEFAULT_TIMEOUT)
-        } else {
-            DEFAULT_TIMEOUT
-        };
-        if 0 < timeout {
-            let timeout = Duration::from_secs(timeout);
-            wait_for_publish(opts.gctx, source_ids.original, pkg, timeout)?;
+            transmit(
+                opts.gctx,
+                ws,
+                pkg,
+                tarball.file(),
+                &mut registry,
+                source_ids.original,
+                opts.dry_run,
+            )?;
+
+            // Short does not include the registry name.
+            let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+            // TODO: figure out where to print this
+            ws.gctx().shell().status(
+                "Uploaded",
+                format!("{short_pkg_description} to <source_description>"),
+            )?;
         }
+
+        let finished = if opts.dry_run {
+            ready
+        } else {
+            const DEFAULT_TIMEOUT: u64 = 60;
+            let timeout = if opts.gctx.cli_unstable().publish_timeout {
+                let timeout: Option<u64> = opts.gctx.get("publish.timeout")?;
+                timeout.unwrap_or(DEFAULT_TIMEOUT)
+            } else {
+                DEFAULT_TIMEOUT
+            };
+            if 0 < timeout {
+                let timeout = Duration::from_secs(timeout);
+                wait_for_publish(opts.gctx, source_ids.original, &outstanding, timeout)?
+            } else {
+                Vec::new()
+            }
+        };
+        for id in &finished {
+            outstanding.remove(id);
+        }
+        ready = order.mark_published(finished);
+        outstanding.extend(ready.iter().copied());
     }
 
     Ok(())
@@ -198,34 +203,33 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
 fn wait_for_publish(
     gctx: &GlobalContext,
     registry_src: SourceId,
-    pkg: &Package,
+    pkgs: &HashSet<PackageId>,
     timeout: Duration,
-) -> CargoResult<()> {
-    let version_req = format!("={}", pkg.version());
+) -> CargoResult<Vec<PackageId>> {
     let mut source = SourceConfigMap::empty(gctx)?.load(registry_src, &HashSet::new())?;
     // Disable the source's built-in progress bars. Repeatedly showing a bunch
     // of independent progress bars can be a little confusing. There is an
     // overall progress bar managed here.
     source.set_quiet(true);
     let source_description = source.source_id().to_string();
-    let query = Dependency::parse(pkg.name(), Some(&version_req), registry_src)?;
 
     let now = std::time::Instant::now();
     let sleep_time = Duration::from_secs(1);
     let max = timeout.as_secs() as usize;
+    // TODO: we should list all the packages that we're currently waiting on
     // Short does not include the registry name.
-    let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
-    gctx.shell().status(
-        "Uploaded",
-        format!("{short_pkg_description} to {source_description}"),
-    )?;
-    gctx.shell().note(format!(
-        "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
-        You may press ctrl-c to skip waiting; the crate should be available shortly."
-    ))?;
+    // let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+    // gctx.shell().status(
+    //     "Uploaded",
+    //     format!("{short_pkg_description} to {source_description}"),
+    // )?;
+    // gctx.shell().note(format!(
+    //     "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
+    //     You may press ctrl-c to skip waiting; the crate should be available shortly."
+    // ))?;
     let mut progress = Progress::with_style("Waiting", ProgressStyle::Ratio, gctx);
     progress.tick_now(0, max, "")?;
-    let is_available = loop {
+    let available = loop {
         {
             let _lock = gctx.acquire_package_cache_lock(CacheLockMode::DownloadExclusive)?;
             // Force re-fetching the source
@@ -235,43 +239,64 @@ fn wait_for_publish(
             // multiple times
             gctx.updated_sources().remove(&source.replaced_source_id());
             source.invalidate_cache();
-            let summaries = loop {
-                // Exact to avoid returning all for path/git
-                match source.query_vec(&query, QueryKind::Exact) {
-                    std::task::Poll::Ready(res) => {
-                        break res?;
-                    }
-                    std::task::Poll::Pending => source.block_until_ready()?,
+            let mut available = Vec::new();
+            for pkg in pkgs {
+                if poll_one_package(registry_src, pkg, &mut source)? {
+                    available.push(*pkg);
                 }
-            };
-            if !summaries.is_empty() {
-                break true;
+            }
+
+            // As soon as any package is available, break this loop so we can see if another
+            // one can be uploaded.
+            if !available.is_empty() {
+                break available;
             }
         }
 
         let elapsed = now.elapsed();
         if timeout < elapsed {
+            // TODO: update the warning to allow multiple packages
             gctx.shell().warn(format!(
-                "timed out waiting for `{short_pkg_description}` to be available in {source_description}",
+                "timed out waiting for `<short_pkg_description>` to be available in {source_description}",
             ))?;
             gctx.shell().note(
                 "the registry may have a backlog that is delaying making the \
                 crate available. The crate should be available soon.",
             )?;
-            break false;
+            break Vec::new();
         }
 
         progress.tick_now(elapsed.as_secs() as usize, max, "")?;
         std::thread::sleep(sleep_time);
     };
-    if is_available {
+    for pkg in &available {
+        let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
         gctx.shell().status(
             "Published",
             format!("{short_pkg_description} at {source_description}"),
         )?;
     }
 
-    Ok(())
+    Ok(available)
+}
+
+fn poll_one_package(
+    registry_src: SourceId,
+    pkg_id: &PackageId,
+    source: &mut dyn Source,
+) -> CargoResult<bool> {
+    let version_req = format!("={}", pkg_id.version());
+    let query = Dependency::parse(pkg_id.name(), Some(&version_req), registry_src)?;
+    let summaries = loop {
+        // Exact to avoid returning all for path/git
+        match source.query_vec(&query, QueryKind::Exact) {
+            std::task::Poll::Ready(res) => {
+                break res?;
+            }
+            std::task::Poll::Pending => source.block_until_ready()?,
+        }
+    };
+    Ok(!summaries.is_empty())
 }
 
 fn verify_dependencies(
@@ -498,12 +523,12 @@ struct PublishOrder {
 impl PublishOrder {
     // Given a package dependency graph, creates a `PublishOrder` for tracking state and also
     // a list of packages that have no dependencies (i.e. can be published immediately).
-    fn new(graph: Graph<PackageId, ()>) -> (Self, Vec<PackageId>) {
+    fn new<T: Clone + Default>(graph: &Graph<PackageId, T>) -> (Self, Vec<PackageId>) {
         let rev_graph = graph.reversed();
 
         let weights: HashMap<_, _> = rev_graph
             .iter()
-            .map(|id| (*id, rev_graph.edges(id).count()))
+            .map(|id| (*id, graph.edges(id).count()))
             .collect();
         let ready = weights
             .iter()
@@ -527,5 +552,58 @@ impl PublishOrder {
             }
         }
         ret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        core::{PackageId, SourceId},
+        sources::CRATES_IO_INDEX,
+        util::{Graph, IntoUrl},
+    };
+
+    use super::PublishOrder;
+
+    fn pkg_id(name: &str) -> PackageId {
+        let loc = CRATES_IO_INDEX.into_url().unwrap();
+        PackageId::try_new(name, "1.0.0", SourceId::for_registry(&loc).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn parallel_schedule() {
+        let mut graph: Graph<PackageId, ()> = Graph::new();
+        let a = pkg_id("a");
+        let b = pkg_id("b");
+        let c = pkg_id("c");
+        let d = pkg_id("d");
+        let e = pkg_id("e");
+
+        graph.add(a);
+        graph.add(b);
+        graph.add(c);
+        graph.add(d);
+        graph.add(e);
+        graph.link(a, c);
+        graph.link(b, c);
+        graph.link(c, d);
+        graph.link(c, e);
+
+        let (mut order, mut ready) = PublishOrder::new(&graph);
+        ready.sort();
+        assert_eq!(ready, vec![d, e]);
+
+        let ready = order.mark_published(vec![d]);
+        assert!(ready.is_empty());
+
+        let ready = order.mark_published(vec![e]);
+        assert_eq!(ready, vec![c]);
+
+        let mut ready = order.mark_published(vec![c]);
+        ready.sort();
+        assert_eq!(ready, vec![a, b]);
+
+        let ready = order.mark_published(vec![a, b]);
+        assert!(ready.is_empty());
     }
 }

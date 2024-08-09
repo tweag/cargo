@@ -282,14 +282,12 @@ pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<Fi
 pub(crate) fn package_with_dep_graph(
     ws: &Workspace<'_>,
     opts: &PackageOpts<'_>,
-) -> CargoResult<LocalDependencies<FileLock>> {
+) -> CargoResult<LocalDependencies<(CliFeatures, FileLock)>> {
     let output = do_package(ws, opts)?;
 
-    Ok(local_deps(
-        output
-            .into_iter()
-            .map(|(pkg, _opts, tarball)| (pkg, tarball)),
-    ))
+    Ok(local_deps(output.into_iter().map(
+        |(pkg, opts, tarball)| (pkg, (opts.cli_features, tarball)),
+    )))
 }
 
 fn do_package<'a>(

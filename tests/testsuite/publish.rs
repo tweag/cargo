@@ -3546,16 +3546,15 @@ fn workspace_with_local_deps_nightly() {
 [COMPILING] level1 v0.0.1 ([ROOT]/foo/target/package/level1-0.0.1)
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPDATING] crates.io index
-[PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
-[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[VERIFYING] level3 v0.0.1 ([ROOT]/foo/level3)
-[COMPILING] level3 v0.0.1 ([ROOT]/foo/target/package/level3-0.0.1)
-[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPLOADING] level3 v0.0.1 ([ROOT]/foo/level3)
-[UPLOADED] level3 v0.0.1 to registry `crates-io`
-[NOTE] waiting for `level3 v0.0.1` to be available at registry `crates-io`.
-You may press ctrl-c to skip waiting; the crate should be available shortly.
+[UPLOADED] level3 v0.0.1 to <source_description>
 [PUBLISHED] level3 v0.0.1 at registry `crates-io`
+[UPLOADING] level2 v0.0.1 ([ROOT]/foo/level2)
+[UPLOADED] level2 v0.0.1 to <source_description>
+[PUBLISHED] level2 v0.0.1 at registry `crates-io`
+[UPLOADING] level1 v0.0.1 ([ROOT]/foo/level1)
+[UPLOADED] level1 v0.0.1 to <source_description>
+[PUBLISHED] level1 v0.0.1 at registry `crates-io`
 
 "#]])
         .run();

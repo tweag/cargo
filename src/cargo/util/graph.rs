@@ -26,13 +26,13 @@ impl<N: Eq + Ord + Clone, E: Default + Clone> Graph<N, E> {
     }
 
     /// Returns the graph obtained by reversing all edges.
-    pub fn reversed(&self) -> Graph<N, E> {
+    pub fn reversed(&self) -> Graph<N, ()> {
         let mut ret = Graph::new();
 
         for n in self.iter() {
             ret.add(n.clone());
-            for (m, e) in self.edges(n) {
-                *ret.link(m.clone(), n.clone()) = e.clone();
+            for (m, _e) in self.edges(n) {
+                ret.link(m.clone(), n.clone());
             }
         }
 

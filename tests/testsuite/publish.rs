@@ -3225,7 +3225,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [UPLOADED] delay v0.0.1 to registry `crates-io`
 [NOTE] waiting for `delay v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[WARNING] timed out waiting for `delay v0.0.1` to be available in registry `crates-io`
+[WARNING] timed out waiting for `<short_pkg_description>` to be available in registry `crates-io`
 [NOTE] the registry may have a backlog that is delaying making the crate available. The crate should be available soon.
 
 "#]])
@@ -3496,18 +3496,7 @@ fn workspace_with_local_deps() {
         .replace_crates_io(crates_io.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
-[PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
-[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[PACKAGING] level2 v0.0.1 ([ROOT]/foo/level2)
-[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[PACKAGING] level1 v0.0.1 ([ROOT]/foo/level1)
-[UPDATING] crates.io index
-[ERROR] failed to prepare local package for uploading
-
-Caused by:
-  no matching package named `level2` found
-  location searched: registry `crates-io`
-  required by package `level1 v0.0.1 ([ROOT]/foo/level1)`
+[ERROR] the `-p` argument must be specified to select a single package to publish
 
 "#]])
         .run();
@@ -3547,17 +3536,17 @@ fn workspace_with_local_deps_nightly() {
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPDATING] crates.io index
 [UPLOADING] level3 v0.0.1 ([ROOT]/foo/level3)
-[UPLOADED] level3 v0.0.1 to <source_description>
+[UPLOADED] level3 v0.0.1 to registry `crates-io`
 [NOTE] waiting for `level3 v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level3 v0.0.1 at registry `crates-io`
 [UPLOADING] level2 v0.0.1 ([ROOT]/foo/level2)
-[UPLOADED] level2 v0.0.1 to <source_description>
+[UPLOADED] level2 v0.0.1 to registry `crates-io`
 [NOTE] waiting for `level2 v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level2 v0.0.1 at registry `crates-io`
 [UPLOADING] level1 v0.0.1 ([ROOT]/foo/level1)
-[UPLOADED] level1 v0.0.1 to <source_description>
+[UPLOADED] level1 v0.0.1 to registry `crates-io`
 [NOTE] waiting for `level1 v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level1 v0.0.1 at registry `crates-io`
@@ -3625,10 +3614,9 @@ fn workspace_parallel() {
 [UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
 [..]
 [..]
-[UPLOADED] [..] v0.0.1 to <source_description>
 [NOTE] waiting for `a v0.0.1, b v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] [..] v0.0.1 at registry `crates-io`
+[PUBLISHED] a v0.0.1 at registry `crates-io`
 [PUBLISHED] [..] v0.0.1 at registry `crates-io`
 
 "#]])

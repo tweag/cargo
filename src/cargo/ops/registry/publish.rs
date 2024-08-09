@@ -16,6 +16,7 @@ use cargo_util::paths;
 use crates_io::NewCrate;
 use crates_io::NewCrateDependency;
 use crates_io::Registry;
+use itertools::Itertools;
 
 use crate::core::dependency::DepKind;
 use crate::core::manifest::ManifestMetadata;
@@ -218,15 +219,19 @@ fn wait_for_publish(
     let max = timeout.as_secs() as usize;
     // TODO: we should list all the packages that we're currently waiting on
     // Short does not include the registry name.
-    // let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
     // gctx.shell().status(
     //     "Uploaded",
     //     format!("{short_pkg_description} to {source_description}"),
     // )?;
-    // gctx.shell().note(format!(
-    //     "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
-    //     You may press ctrl-c to skip waiting; the crate should be available shortly."
-    // ))?;
+    let short_pkg_description = pkgs
+        .iter()
+        .map(|p| format!("{} v{}", p.name(), p.version()))
+        .sorted()
+        .join(", ");
+    gctx.shell().note(format!(
+        "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
+        You may press ctrl-c to skip waiting; the crate should be available shortly."
+    ))?;
     let mut progress = Progress::with_style("Waiting", ProgressStyle::Ratio, gctx);
     progress.tick_now(0, max, "")?;
     let available = loop {

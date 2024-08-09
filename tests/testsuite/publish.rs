@@ -3548,33 +3548,38 @@ fn workspace_with_local_deps_nightly() {
 [UPDATING] crates.io index
 [UPLOADING] level3 v0.0.1 ([ROOT]/foo/level3)
 [UPLOADED] level3 v0.0.1 to <source_description>
+[NOTE] waiting for `level3 v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level3 v0.0.1 at registry `crates-io`
 [UPLOADING] level2 v0.0.1 ([ROOT]/foo/level2)
 [UPLOADED] level2 v0.0.1 to <source_description>
+[NOTE] waiting for `level2 v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level2 v0.0.1 at registry `crates-io`
 [UPLOADING] level1 v0.0.1 ([ROOT]/foo/level1)
 [UPLOADED] level1 v0.0.1 to <source_description>
+[NOTE] waiting for `level1 v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] level1 v0.0.1 at registry `crates-io`
 
 "#]])
         .run();
 }
 
-
 #[cargo_test]
 fn workspace_parallel() {
     let registry = RegistryBuilder::new().http_api().http_index().build();
     let p = project()
-            .file(
-                "Cargo.toml",
-                r#"
+        .file(
+            "Cargo.toml",
+            r#"
             [workspace]
             members = ["a", "b"]
-        "#
-            )
-            .file(
-                "a/Cargo.toml",
-                r#"
+        "#,
+        )
+        .file(
+            "a/Cargo.toml",
+            r#"
             [package]
             name = "a"
             version = "0.0.1"
@@ -3584,11 +3589,11 @@ fn workspace_parallel() {
             description = "a"
             repository = "bar"
         "#,
-            )
-            .file("a/src/lib.rs", "")
-            .file(
-                "b/Cargo.toml",
-                r#"
+        )
+        .file("a/src/lib.rs", "")
+        .file(
+            "b/Cargo.toml",
+            r#"
             [package]
             name = "b"
             version = "0.0.1"
@@ -3597,10 +3602,10 @@ fn workspace_parallel() {
             license = "MIT"
             description = "b"
             repository = "bar"
-        "#
-            )
-            .file("b/src/lib.rs", "")
-            .build();
+        "#,
+        )
+        .file("b/src/lib.rs", "")
+        .build();
 
     p.cargo("publish -Zpackage-workspace")
         .masquerade_as_nightly_cargo(&["package-workspace"])
@@ -3621,6 +3626,8 @@ fn workspace_parallel() {
 [..]
 [..]
 [UPLOADED] [..] v0.0.1 to <source_description>
+[NOTE] waiting for `a v0.0.1, b v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] [..] v0.0.1 at registry `crates-io`
 [PUBLISHED] [..] v0.0.1 at registry `crates-io`
 

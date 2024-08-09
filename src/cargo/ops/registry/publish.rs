@@ -3,6 +3,7 @@
 //! [1]: https://doc.rust-lang.org/nightly/cargo/reference/registry-web-api.html#publish
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::File;
 use std::time::Duration;
@@ -21,6 +22,7 @@ use crate::core::manifest::ManifestMetadata;
 use crate::core::resolver::CliFeatures;
 use crate::core::Dependency;
 use crate::core::Package;
+use crate::core::PackageId;
 use crate::core::PackageIdSpecQuery;
 use crate::core::SourceId;
 use crate::core::Workspace;
@@ -34,6 +36,7 @@ use crate::util::auth;
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
 use crate::util::toml::prepare_for_publish;
+use crate::util::Graph;
 use crate::util::Progress;
 use crate::util::ProgressStyle;
 use crate::CargoResult;
@@ -518,4 +521,47 @@ fn transmit(
     }
 
     Ok(())
+}
+
+// State for tracking dependencies during upload.
+struct PublishOrder {
+    // The reverse-dependency graph. It has an edge p -> q if package q depends on package p.
+    rev_graph: Graph<PackageId, ()>,
+    // The weight of a package is the number of unpublished dependencies it has.
+    weights: HashMap<PackageId, usize>,
+}
+
+impl PublishOrder {
+    // Given a package dependency graph, creates a `PublishOrder` for tracking state and also
+    // a list of packages that have no dependencies (i.e. can be published immediately).
+    fn new(graph: Graph<PackageId, ()>) -> (Self, Vec<PackageId>) {
+        let rev_graph = graph.reversed();
+
+        let weights: HashMap<_, _> = rev_graph
+            .iter()
+            .map(|id| (*id, rev_graph.edges(id).count()))
+            .collect();
+        let ready = weights
+            .iter()
+            .filter_map(|(id, weight)| (*weight == 0).then_some(*id))
+            .collect();
+        (Self { rev_graph, weights }, ready)
+    }
+
+    // Marks a list of packages as having been published, and returns a list of packages
+    // that are newly ready for publishing.
+    fn mark_published(&mut self, published: Vec<PackageId>) -> Vec<PackageId> {
+        let mut ret = Vec::new();
+        for id in published {
+            for (dependent_id, _) in self.rev_graph.edges(&id) {
+                if let Some(weight) = self.weights.get_mut(dependent_id) {
+                    *weight = weight.saturating_sub(1);
+                    if *weight == 0 {
+                        ret.push(*dependent_id);
+                    }
+                }
+            }
+        }
+        ret
+    }
 }

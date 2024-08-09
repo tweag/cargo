@@ -270,6 +270,30 @@ fn infer_registry(
 /// Returns the generated package files. If `opts.list` is true, skips
 /// generating package files and returns an empty list.
 pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<FileLock>> {
+    Ok(do_package(ws, opts)?.into_iter().map(|x| x.2).collect())
+}
+
+/// Packages an entire workspace.
+///
+/// Returns the generated package files. If `opts.list` is true, skips
+/// generating package files and returns an empty list.
+pub(crate) fn package_with_dep_graph(
+    ws: &Workspace<'_>,
+    opts: &PackageOpts<'_>,
+) -> CargoResult<LocalDependencies<FileLock>> {
+    let output = do_package(ws, opts)?;
+
+    Ok(local_deps(
+        output
+            .into_iter()
+            .map(|(pkg, _opts, tarball)| (pkg, tarball)),
+    ))
+}
+
+fn do_package<'a>(
+    ws: &Workspace<'_>,
+    opts: &PackageOpts<'a>,
+) -> CargoResult<Vec<(Package, PackageOpts<'a>, FileLock)>> {
     let specs = &opts.to_package.to_package_id_specs(ws)?;
     // If -p is used, we should check spec is matched with the members (See #13719)
     if let ops::Packages::Packages(_) = opts.to_package {
@@ -335,19 +359,19 @@ pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<Fi
         }
     }
 
-    Ok(outputs.into_iter().map(|x| x.2).collect())
+    Ok(outputs)
 }
 
 /// Just the part of the dependency graph that's between the packages we're packaging.
 /// (Is the package name a good key? Does it uniquely identify packages?)
 #[derive(Clone, Debug, Default)]
-struct LocalDependencies {
-    packages: HashMap<PackageId, (Package, CliFeatures)>,
-    graph: Graph<PackageId, ()>,
+pub(crate) struct LocalDependencies<T> {
+    pub packages: HashMap<PackageId, (Package, T)>,
+    pub graph: Graph<PackageId, ()>,
 }
 
-impl LocalDependencies {
-    fn sort(&self) -> Vec<(Package, CliFeatures)> {
+impl<T: Clone> LocalDependencies<T> {
+    pub fn sort(&self) -> Vec<(Package, T)> {
         self.graph
             .sort()
             .into_iter()
@@ -360,9 +384,10 @@ impl LocalDependencies {
 /// ignoring dev dependencies.
 ///
 /// We assume that the packages all belong to this workspace.
-fn local_deps(packages: impl Iterator<Item = (Package, CliFeatures)>) -> LocalDependencies {
-    let packages: HashMap<PackageId, (Package, CliFeatures)> =
-        packages.map(|pkg| (pkg.0.package_id(), pkg)).collect();
+fn local_deps<T>(packages: impl Iterator<Item = (Package, T)>) -> LocalDependencies<T> {
+    let packages: HashMap<PackageId, (Package, T)> = packages
+        .map(|(pkg, payload)| (pkg.package_id(), (pkg, payload)))
+        .collect();
 
     // Dependencies have source ids but not package ids. We draw an edge
     // whenever a dependency's source id matches one of our packages. This is
@@ -374,7 +399,7 @@ fn local_deps(packages: impl Iterator<Item = (Package, CliFeatures)>) -> LocalDe
         .collect();
 
     let mut graph = Graph::new();
-    for (pkg, _features) in packages.values() {
+    for (pkg, _payload) in packages.values() {
         graph.add(pkg.package_id());
         for dep in pkg.dependencies() {
             // Ignore local dev-dependencies because they aren't needed for intra-workspace

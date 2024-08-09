@@ -147,6 +147,7 @@ mod progress;
 mod pub_priv;
 mod publish;
 mod publish_lockfile;
+mod publish_with_package_workspace_feature;
 mod read_manifest;
 mod registry;
 mod registry_auth;

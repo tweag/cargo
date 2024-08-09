@@ -50,7 +50,7 @@ mod cargo_fetch;
 mod cargo_install;
 mod cargo_new;
 mod cargo_output_metadata;
-mod cargo_package;
+pub(crate) mod cargo_package;
 mod cargo_pkgid;
 mod cargo_read_manifest;
 pub mod cargo_remove;

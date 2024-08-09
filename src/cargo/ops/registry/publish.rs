@@ -82,19 +82,13 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         .filter(|(m, _)| specs.iter().any(|spec| spec.matches(m.package_id())))
         .collect();
 
-    let mut publish_registry = match opts.reg_or_index.as_ref() {
-        Some(RegistryOrIndex::Registry(registry)) => Some(registry.clone()),
-        _ => None,
-    };
+    let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
+    // FIXME: the package-vs-publish logic for validating registries should be almost the same,
+    // but not *completely* (e.g. in that recent publish = false issue)
+    let reg_or_index =
+        ops::cargo_package::infer_registry(&just_pkgs, opts.reg_or_index.clone(), true)?;
 
-    let reg_or_index = match opts.reg_or_index.clone() {
-        Some(RegistryOrIndex::Registry(_)) | None => {
-            publish_registry.clone().map(RegistryOrIndex::Registry)
-        }
-        val => val,
-    };
-
-    ops::package(
+    let pkg_dep_graph = ops::cargo_package::package_with_dep_graph(
         ws,
         &PackageOpts {
             gctx: opts.gctx,
@@ -107,58 +101,18 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
             jobs: opts.jobs.clone(),
             keep_going: opts.keep_going,
             cli_features: opts.cli_features.clone(),
-            reg_or_index,
+            reg_or_index: reg_or_index.clone(),
         },
     )?;
 
     // TODO: Support more than one package.
     let (pkg, cli_features) = pkgs.pop().unwrap();
 
-    if let Some(ref allowed_registries) = *pkg.publish() {
-        if publish_registry.is_none() && allowed_registries.len() == 1 {
-            // If there is only one allowed registry, push to that one directly,
-            // even though there is no registry specified in the command.
-            let default_registry = &allowed_registries[0];
-            if default_registry != CRATES_IO_REGISTRY {
-                // Don't change the registry for crates.io and don't warn the user.
-                // crates.io will be defaulted even without this.
-                opts.gctx.shell().note(&format!(
-                    "found `{}` as only allowed registry. Publishing to it automatically.",
-                    default_registry
-                ))?;
-                publish_registry = Some(default_registry.clone());
-            }
-        }
-
-        let reg_name = publish_registry
-            .clone()
-            .unwrap_or_else(|| CRATES_IO_REGISTRY.to_string());
-        if allowed_registries.is_empty() {
-            bail!(
-                "`{}` cannot be published.\n\
-                 `package.publish` must be set to `true` or a non-empty list in Cargo.toml to publish.",
-                pkg.name(),
-            );
-        } else if !allowed_registries.contains(&reg_name) {
-            bail!(
-                "`{}` cannot be published.\n\
-                 The registry `{}` is not listed in the `package.publish` value in Cargo.toml.",
-                pkg.name(),
-                reg_name
-            );
-        }
-    }
     // This is only used to confirm that we can create a token before we build the package.
     // This causes the credential provider to be called an extra time, but keeps the same order of errors.
     let ver = pkg.version().to_string();
     let operation = Operation::Read;
 
-    let reg_or_index = match opts.reg_or_index.clone() {
-        Some(RegistryOrIndex::Registry(_)) | None => {
-            publish_registry.map(RegistryOrIndex::Registry)
-        }
-        val => val,
-    };
     let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
     let mut registry = super::registry(
         opts.gctx,

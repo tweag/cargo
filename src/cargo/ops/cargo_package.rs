@@ -14,7 +14,7 @@ use crate::core::resolver::HasDevUnits;
 use crate::core::{Feature, PackageIdSpecQuery, Shell, Verbosity, Workspace};
 use crate::core::{Package, PackageId, PackageSet, Resolve, SourceId};
 use crate::sources::registry::index::{IndexPackage, RegistryDependency};
-use crate::sources::{PathSource, SourceConfigMap, CRATES_IO_REGISTRY};
+use crate::sources::{PathSource, CRATES_IO_REGISTRY};
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
 use crate::util::errors::CargoResult;
@@ -180,11 +180,10 @@ fn create_package(
 /// packages that we're packaging: if we're packaging foo-bin and foo-lib, and foo-bin
 /// depends on foo-lib, then the foo-lib entry in foo-bin's lockfile will depend on the
 /// registry that we're building packages for.
-fn infer_registry(
-    gctx: &GlobalContext,
+pub(crate) fn infer_registry(
     pkgs: &[&Package],
     reg_or_index: Option<RegistryOrIndex>,
-) -> CargoResult<SourceId> {
+) -> CargoResult<Option<RegistryOrIndex>> {
     let reg_or_index = match reg_or_index {
         Some(r) => r,
         None => {
@@ -251,18 +250,21 @@ fn infer_registry(
         }
     }
 
-    let sid = match reg_or_index {
-        RegistryOrIndex::Index(url) => SourceId::for_registry(&url)?,
-        RegistryOrIndex::Registry(reg) if reg == CRATES_IO_REGISTRY => SourceId::crates_io(gctx)?,
-        RegistryOrIndex::Registry(reg) => SourceId::alt_registry(gctx, &reg)?,
-    };
+    // FIXME: this is WIP logic for extra validation during publishing. Maybe it can be factored out into another function?
+    // But first let's figure out what extra validation is needed.
+    if false {
+        for pkg in pkgs {
+            if pkg.publish() == &Some(Vec::new()) {
+                bail!(
+                        "`{}` cannot be published.\n\
+                        `package.publish` must be set to `true` or a non-empty list in Cargo.toml to publish.",
+                        pkg.name(),
+                    );
+            }
+        }
+    }
 
-    // Load source replacements that are built-in to Cargo.
-    let sid = SourceConfigMap::empty(gctx)?
-        .load(sid, &HashSet::new())?
-        .replaced_source_id();
-
-    Ok(sid)
+    Ok(Some(reg_or_index))
 }
 
 /// Packages an entire workspace.
@@ -313,7 +315,8 @@ fn do_package<'a>(
     }
 
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
-    let publish_reg = infer_registry(ws.gctx(), &just_pkgs, opts.reg_or_index.clone())?;
+    let publish_reg = infer_registry(&just_pkgs, opts.reg_or_index.clone())?;
+    let publish_reg = ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref())?.replacement;
     debug!("packaging for registry {publish_reg}");
 
     let mut local_reg = if ws.gctx().cli_unstable().package_workspace {

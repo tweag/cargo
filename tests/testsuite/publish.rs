@@ -3559,3 +3559,71 @@ fn workspace_with_local_deps_nightly() {
 "#]])
         .run();
 }
+
+
+#[cargo_test]
+fn workspace_parallel() {
+    let registry = RegistryBuilder::new().http_api().http_index().build();
+    let p = project()
+            .file(
+                "Cargo.toml",
+                r#"
+            [workspace]
+            members = ["a", "b"]
+        "#
+            )
+            .file(
+                "a/Cargo.toml",
+                r#"
+            [package]
+            name = "a"
+            version = "0.0.1"
+            edition = "2015"
+            authors = []
+            license = "MIT"
+            description = "a"
+            repository = "bar"
+        "#,
+            )
+            .file("a/src/lib.rs", "")
+            .file(
+                "b/Cargo.toml",
+                r#"
+            [package]
+            name = "b"
+            version = "0.0.1"
+            edition = "2015"
+            authors = []
+            license = "MIT"
+            description = "b"
+            repository = "bar"
+        "#
+            )
+            .file("b/src/lib.rs", "")
+            .build();
+
+    p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
+        .with_stderr_data(str![[r#"
+[PACKAGING] a v0.0.1 ([ROOT]/foo/a)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[PACKAGING] b v0.0.1 ([ROOT]/foo/b)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[VERIFYING] a v0.0.1 ([ROOT]/foo/a)
+[COMPILING] a v0.0.1 ([ROOT]/foo/target/package/a-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[VERIFYING] b v0.0.1 ([ROOT]/foo/b)
+[COMPILING] b v0.0.1 ([ROOT]/foo/target/package/b-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+[UPDATING] crates.io index
+[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
+[..]
+[..]
+[UPLOADED] [..] v0.0.1 to <source_description>
+[PUBLISHED] [..] v0.0.1 at registry `crates-io`
+[PUBLISHED] [..] v0.0.1 at registry `crates-io`
+
+"#]])
+        .run();
+}

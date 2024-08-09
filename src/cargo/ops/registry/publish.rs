@@ -61,6 +61,16 @@ pub struct PublishOpts<'gctx> {
 
 pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
     let specs = opts.to_publish.to_package_id_specs(ws)?;
+
+    if !ws.gctx().cli_unstable().package_workspace {
+        if specs.len() > 1 {
+            bail!("the `-p` argument must be specified to select a single package to publish")
+        }
+        if Packages::Default == opts.to_publish && ws.is_virtual() {
+            bail!("the `-p` argument must be specified in the root of a virtual workspace")
+        }
+    }
+
     let member_ids = ws.members().map(|p| p.package_id());
     // Check that the spec matches exactly one member.
     specs[0].query(member_ids)?;

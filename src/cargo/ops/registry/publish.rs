@@ -167,10 +167,11 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
 
             // Short does not include the registry name.
             let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+            let source_description = source_ids.original.to_string();
             // TODO: figure out where to print this
             ws.gctx().shell().status(
                 "Uploaded",
-                format!("{short_pkg_description} to <source_description>"),
+                format!("{short_pkg_description} to {source_description}"),
             )?;
         }
 

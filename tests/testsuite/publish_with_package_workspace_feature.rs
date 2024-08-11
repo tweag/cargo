@@ -2540,8 +2540,8 @@ fn in_package_workspace_with_members_with_features_old() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p li --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
 [WARNING] manifest has no documentation, homepage or repository.
@@ -2562,8 +2562,8 @@ You may press ctrl-c to skip waiting; the crate should be available shortly.
 
 #[cargo_test]
 fn in_virtual_workspace() {
-    // Use local registry for faster test times since no publish will occur
-    let registry = registry::init();
+    // `publish` generally requires a remote registry
+    let registry = registry::RegistryBuilder::new().http_api().build();
 
     let p = project()
         .file(
@@ -2589,8 +2589,8 @@ fn in_virtual_workspace() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] the `-p` argument must be specified in the root of a virtual workspace
@@ -2641,8 +2641,8 @@ fn in_virtual_workspace_with_p() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p li --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
 [WARNING] manifest has no documentation, homepage or repository.
@@ -2692,8 +2692,8 @@ fn in_package_workspace_not_found() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p li --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] package ID specification `li` did not match any packages
@@ -2706,8 +2706,8 @@ fn in_package_workspace_not_found() {
 
 #[cargo_test]
 fn in_package_workspace_found_multiple() {
-    // Use local registry for faster test times since no publish will occur
-    let registry = registry::init();
+    // `publish` generally requires a remote registry
+    let registry = registry::RegistryBuilder::new().http_api().build();
 
     let p = project()
         .file(
@@ -2751,8 +2751,8 @@ fn in_package_workspace_found_multiple() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p li* --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] the `-p` argument must be specified to select a single package to publish
@@ -2796,8 +2796,8 @@ fn publish_path_dependency_without_workspace() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p bar --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] package ID specification `bar` did not match any packages
@@ -2829,8 +2829,8 @@ fn http_api_not_noop() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
 [WARNING] manifest has no documentation, homepage or repository.
@@ -2910,8 +2910,8 @@ fn wait_for_first_publish() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(0)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3004,8 +3004,8 @@ fn wait_for_first_publish_underscore() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(0)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3105,8 +3105,8 @@ fn wait_for_subsequent_publish() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(0)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3176,7 +3176,7 @@ fn skip_wait_for_publish() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify -Zpublish-timeout")
-    .replace_crates_io(registry.index_url())
+        .replace_crates_io(registry.index_url())
         .masquerade_as_nightly_cargo(&["publish-timeout"])
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3272,8 +3272,8 @@ fn wait_for_git_publish() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(0)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3332,8 +3332,8 @@ fn invalid_token() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .env("CARGO_REGISTRY_TOKEN", "\x16")
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -3369,8 +3369,8 @@ fn versionless_package() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
-    .masquerade_as_nightly_cargo(&["package-workspace"])
-    .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["package-workspace"])
+        .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] `foo` cannot be published.

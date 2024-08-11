@@ -327,13 +327,13 @@ fn publish_multi(
             )?;
 
             // Short does not include the registry name.
-            let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
-            let source_description = source_ids.original.to_string();
+            // let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+            // let source_description = source_ids.original.to_string();
             // TODO: figure out where to print this
-            ws.gctx().shell().status(
-                "Uploaded",
-                format!("{short_pkg_description} to {source_description}"),
-            )?;
+            // ws.gctx().shell().status(
+            //     "Uploaded",
+            //     format!("{short_pkg_description} to {source_description}"),
+            // )?;
         }
 
         let finished = if opts.dry_run {

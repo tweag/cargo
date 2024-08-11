@@ -149,8 +149,9 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
 
     let (mut order, mut ready) = PublishOrder::new(&pkg_dep_graph.graph);
     let mut outstanding: HashSet<_> = ready.iter().copied().collect();
+    let mut timed_out = false;
 
-    while !outstanding.is_empty() {
+    while !outstanding.is_empty() && !timed_out {
         for pkg_id in &ready {
             let (pkg, (_features, tarball)) = &pkg_dep_graph.packages[pkg_id];
             opts.gctx.shell().status("Uploading", pkg_id.to_string())?;
@@ -189,6 +190,13 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
                 let timeout = Duration::from_secs(timeout);
                 wait_for_publish(opts.gctx, source_ids.original, &outstanding, timeout)?
             } else {
+                // FIXME: Infinite loop if timeout is 0, and no package ever
+                // finishes. On our first timeout, we need to abort publishing
+                // if we have more packages in the queue. It doesn't make sense
+                // to continue.
+
+                // TODO: For now we'll just break the infinite loop.
+                timed_out = true;
                 Vec::new()
             }
         };

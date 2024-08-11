@@ -226,17 +226,16 @@ fn wait_for_publish(
     let now = std::time::Instant::now();
     let sleep_time = Duration::from_secs(1);
     let max = timeout.as_secs() as usize;
-    // TODO: we should list all the packages that we're currently waiting on
     // Short does not include the registry name.
-    // gctx.shell().status(
-    //     "Uploaded",
-    //     format!("{short_pkg_description} to {source_description}"),
-    // )?;
     let short_pkg_description = pkgs
         .iter()
         .map(|p| format!("{} v{}", p.name(), p.version()))
         .sorted()
         .join(", ");
+    gctx.shell().status(
+        "Uploaded",
+        format!("{short_pkg_description} to {source_description}"),
+    )?;
     gctx.shell().note(format!(
         "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
         You may press ctrl-c to skip waiting; the crate should be available shortly."

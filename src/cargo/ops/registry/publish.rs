@@ -33,6 +33,7 @@ use crate::ops::Packages;
 use crate::sources::source::QueryKind;
 use crate::sources::source::Source;
 use crate::sources::SourceConfigMap;
+use crate::sources::CRATES_IO_REGISTRY;
 use crate::util::auth;
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
@@ -61,9 +62,10 @@ pub struct PublishOpts<'gctx> {
 }
 
 pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
+    let multi_package_mode = ws.gctx().cli_unstable().package_workspace;
     let specs = opts.to_publish.to_package_id_specs(ws)?;
 
-    if !ws.gctx().cli_unstable().package_workspace {
+    if !multi_package_mode {
         if specs.len() > 1 {
             bail!("the `-p` argument must be specified to select a single package to publish")
         }
@@ -72,9 +74,11 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         }
     }
 
-    let member_ids = ws.members().map(|p| p.package_id());
-    // Check that the spec matches exactly one member.
-    specs[0].query(member_ids)?;
+    let member_ids: Vec<_> = ws.members().map(|p| p.package_id()).collect();
+    // Check that the specs match members.
+    for spec in &specs {
+        spec.query(member_ids.clone())?;
+    }
     let mut pkgs = ws.members_with_features(&specs, &opts.cli_features)?;
     // In `members_with_features_old`, it will add "current" package (determined by the cwd)
     // So we need filter
@@ -83,6 +87,162 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
         .filter(|(m, _)| specs.iter().any(|spec| spec.matches(m.package_id())))
         .collect();
 
+    if multi_package_mode {
+        publish_multi(ws, pkgs, opts)
+    } else {
+        publish_one(ws, &mut pkgs, opts)
+    }
+}
+
+/// To be removed when package_workspace is stabilized.
+fn publish_one(
+    ws: &Workspace<'_>,
+    pkgs: &mut Vec<(&Package, CliFeatures)>,
+    opts: &PublishOpts<'_>,
+) -> CargoResult<()> {
+    // Double check. It is safe theoretically, unless logic has updated.
+    assert_eq!(pkgs.len(), 1);
+
+    let (pkg, cli_features) = pkgs.pop().unwrap();
+
+    let mut publish_registry = match opts.reg_or_index.as_ref() {
+        Some(RegistryOrIndex::Registry(registry)) => Some(registry.clone()),
+        _ => None,
+    };
+    if let Some(ref allowed_registries) = *pkg.publish() {
+        if publish_registry.is_none() && allowed_registries.len() == 1 {
+            // If there is only one allowed registry, push to that one directly,
+            // even though there is no registry specified in the command.
+            let default_registry = &allowed_registries[0];
+            if default_registry != CRATES_IO_REGISTRY {
+                // Don't change the registry for crates.io and don't warn the user.
+                // crates.io will be defaulted even without this.
+                opts.gctx.shell().note(&format!(
+                    "found `{}` as only allowed registry. Publishing to it automatically.",
+                    default_registry
+                ))?;
+                publish_registry = Some(default_registry.clone());
+            }
+        }
+
+        let reg_name = publish_registry
+            .clone()
+            .unwrap_or_else(|| CRATES_IO_REGISTRY.to_string());
+        if allowed_registries.is_empty() {
+            bail!(
+                "`{}` cannot be published.\n\
+                 `package.publish` must be set to `true` or a non-empty list in Cargo.toml to publish.",
+                pkg.name(),
+            );
+        } else if !allowed_registries.contains(&reg_name) {
+            bail!(
+                "`{}` cannot be published.\n\
+                 The registry `{}` is not listed in the `package.publish` value in Cargo.toml.",
+                pkg.name(),
+                reg_name
+            );
+        }
+    }
+    // This is only used to confirm that we can create a token before we build the package.
+    // This causes the credential provider to be called an extra time, but keeps the same order of errors.
+    let ver = pkg.version().to_string();
+    let operation = Operation::Read;
+
+    let reg_or_index = match opts.reg_or_index.clone() {
+        Some(RegistryOrIndex::Registry(_)) | None => {
+            publish_registry.map(RegistryOrIndex::Registry)
+        }
+        val => val,
+    };
+    let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
+    let mut registry = super::registry(
+        opts.gctx,
+        &source_ids,
+        opts.token.as_ref().map(Secret::as_deref),
+        reg_or_index.as_ref(),
+        true,
+        Some(operation).filter(|_| !opts.dry_run),
+    )?;
+    verify_dependencies(pkg, &registry, source_ids.original)?;
+
+    // Prepare a tarball, with a non-suppressible warning if metadata
+    // is missing since this is being put online.
+    let tarball = ops::package_one(
+        ws,
+        pkg,
+        &PackageOpts {
+            gctx: opts.gctx,
+            verify: opts.verify,
+            list: false,
+            check_metadata: true,
+            allow_dirty: opts.allow_dirty,
+            to_package: Packages::Default,
+            targets: opts.targets.clone(),
+            jobs: opts.jobs.clone(),
+            keep_going: opts.keep_going,
+            cli_features,
+            reg_or_index,
+        },
+    )?;
+
+    if !opts.dry_run {
+        let hash = cargo_util::Sha256::new()
+            .update_file(tarball.file())?
+            .finish_hex();
+        let operation = Operation::Publish {
+            name: pkg.name().as_str(),
+            vers: &ver,
+            cksum: &hash,
+        };
+        registry.set_token(Some(auth::auth_token(
+            &opts.gctx,
+            &source_ids.original,
+            None,
+            operation,
+            vec![],
+            false,
+        )?));
+    }
+
+    opts.gctx
+        .shell()
+        .status("Uploading", pkg.package_id().to_string())?;
+    transmit(
+        opts.gctx,
+        ws,
+        pkg,
+        tarball.file(),
+        &mut registry,
+        source_ids.original,
+        opts.dry_run,
+    )?;
+    if !opts.dry_run {
+        const DEFAULT_TIMEOUT: u64 = 60;
+        let timeout = if opts.gctx.cli_unstable().publish_timeout {
+            let timeout: Option<u64> = opts.gctx.get("publish.timeout")?;
+            timeout.unwrap_or(DEFAULT_TIMEOUT)
+        } else {
+            DEFAULT_TIMEOUT
+        };
+        if 0 < timeout {
+            let timeout = Duration::from_secs(timeout);
+            wait_for_publish(
+                opts.gctx,
+                source_ids.original,
+                &HashSet::from([pkg.package_id()]),
+                timeout,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn publish_multi(
+    ws: &Workspace<'_>,
+    pkgs: Vec<(&Package, CliFeatures)>,
+    opts: &PublishOpts<'_>,
+) -> CargoResult<()> {
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
     // FIXME: the package-vs-publish logic for validating registries should be almost the same,
     // but not *completely* (e.g. in that recent publish = false issue)

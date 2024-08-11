@@ -111,6 +111,7 @@ fn simple() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -156,6 +157,7 @@ fn simple_publish_with_http() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --token sekrit --registry dummy-registry")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
 [UPDATING] `dummy-registry` index
 [WARNING] manifest has no documentation, homepage or repository.
@@ -241,6 +243,7 @@ fn old_token_location() {
 
     // Verify can't publish without a token.
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -254,6 +257,7 @@ or use environment variable CARGO_REGISTRY_TOKEN
     fs::write(&credentials, format!(r#"token = "{}""#, registry.token())).unwrap();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -296,6 +300,7 @@ fn simple_with_index() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg("--token")
         .arg(registry.token())
         .arg("--index")
@@ -344,6 +349,7 @@ fn git_deps() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -384,6 +390,7 @@ fn path_dependency_no_version() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -420,6 +427,7 @@ fn unpublishable_crate() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --index")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg(registry.index_url().as_str())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -457,6 +465,7 @@ fn dont_publish_dirty() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -498,6 +507,7 @@ fn publish_clean() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -546,6 +556,7 @@ fn publish_in_sub_repo() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .cwd("bar")
         .with_stderr_data(str![[r#"
@@ -596,6 +607,7 @@ fn publish_when_ignored() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -643,6 +655,7 @@ fn ignore_when_crate_ignored() {
         )
         .nocommit_file("bar/src/main.rs", "fn main() {}");
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .cwd("bar")
         .with_stderr_data(str![[r#"
@@ -690,6 +703,7 @@ fn new_crate_rejected() {
         )
         .nocommit_file("src/main.rs", "fn main() {}");
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -722,6 +736,7 @@ fn dry_run() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --dry-run --index")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg(registry.index_url().as_str())
         .with_stderr_data(str![[r#"
 [UPDATING] `[ROOT]/registry` index
@@ -765,6 +780,7 @@ fn registry_not_in_publish_list() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg("--registry")
         .arg("alternative")
         .with_status(101)
@@ -796,6 +812,7 @@ fn publish_empty_list() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] `foo` cannot be published.
@@ -836,6 +853,7 @@ fn publish_allowed_registry() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
@@ -896,6 +914,7 @@ fn publish_implicitly_to_only_allowed_registry() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
 [NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
@@ -957,6 +976,7 @@ fn publish_failed_with_index_and_only_allowed_registry() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg("--index")
         .arg(registry.index_url().as_str())
         .with_status(101)
@@ -993,6 +1013,7 @@ fn publish_fail_with_no_registry_specified() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] `foo` cannot be published.
@@ -1022,6 +1043,7 @@ fn block_publish_no_registry() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] `foo` cannot be published.
@@ -1055,6 +1077,7 @@ fn publish_with_crates_io_explicit() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] `foo` cannot be published.
@@ -1064,6 +1087,7 @@ The registry `alternative` is not listed in the `package.publish` value in Cargo
         .run();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1115,6 +1139,7 @@ fn publish_with_select_features() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --features required")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1166,6 +1191,7 @@ fn publish_with_all_features() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --all-features")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1217,6 +1243,7 @@ fn publish_with_no_default_features() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-default-features")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -1265,6 +1292,7 @@ fn publish_with_patch() {
 
     // Check that verify fails with patched crate which has new functionality.
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -1278,6 +1306,7 @@ error[E0425]: cannot find function `newfunc` in crate `bar`
     p.change_file("src/main.rs", "extern crate bar; pub fn main() {}");
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1362,6 +1391,7 @@ fn publish_checks_for_token_before_verify() {
 
     // Assert upload token error before the package is verified
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -1375,6 +1405,7 @@ or use environment variable CARGO_REGISTRY_TOKEN
 
     // Assert package verified successfully on dry run
     p.cargo("publish -Zpackage-workspace --dry-run")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1409,6 +1440,7 @@ fn publish_with_bad_source() {
         .build();
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] crates-io is replaced with non-remote-registry source registry `[ROOT]/foo/registry`;
@@ -1429,6 +1461,7 @@ include `--registry crates-io` to use crates.io
     );
 
     p.cargo("publish -Zpackage-workspace")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] crates-io is replaced with non-remote-registry source dir [ROOT]/foo/vendor;
@@ -1490,6 +1523,7 @@ fn publish_git_with_version() {
         .run();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -1735,6 +1769,7 @@ fn publish_dev_dep_stripping() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .env("RUSTFLAGS", "--cfg unix")
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
@@ -2049,6 +2084,7 @@ fn credentials_ambiguous_filename() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -2063,6 +2099,7 @@ fn credentials_ambiguous_filename() {
     fs::write(credentials, r#"token = "sekrit""#).unwrap();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+    .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -2108,6 +2145,7 @@ fn index_requires_token() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --index")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .arg(registry.index_url().as_str())
         .with_status(101)
         .with_stderr_data(str![[r#"
@@ -2138,6 +2176,7 @@ fn cratesio_source_replacement() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [ERROR] crates-io is replaced with remote registry dummy-registry;
@@ -2180,6 +2219,7 @@ fn api_error_json() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
@@ -2228,6 +2268,7 @@ fn api_error_200() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
@@ -2276,6 +2317,7 @@ fn api_error_code() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
@@ -2333,6 +2375,7 @@ fn api_curl_error() {
     // (CURLE_GOT_NOTHING) is:
     //    Server returned nothing (no headers, no data) (Empty reply from server)
     p.cargo("publish -Zpackage-workspace --no-verify --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
@@ -2381,6 +2424,7 @@ fn api_other_error() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify --registry alternative")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] `alternative` index
@@ -2432,6 +2476,7 @@ fn in_package_workspace() {
         .build();
 
     p.cargo("publish -Zpackage-workspace -p li --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
@@ -2453,8 +2498,8 @@ You may press ctrl-c to skip waiting; the crate should be available shortly.
 
 #[cargo_test]
 fn with_duplicate_spec_in_members() {
-    // Use local registry for faster test times since no publish will occur
-    let registry = registry::init();
+    // `publish` generally requires a remote registry
+    let registry = registry::RegistryBuilder::new().http_api().build();
 
     let p = project()
         .file(
@@ -2498,6 +2543,7 @@ fn with_duplicate_spec_in_members() {
         .build();
 
     p.cargo("publish -Zpackage-workspace --no-verify")
+        .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"

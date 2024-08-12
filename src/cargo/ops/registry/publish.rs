@@ -30,6 +30,7 @@ use crate::core::Workspace;
 use crate::ops;
 use crate::ops::PackageOpts;
 use crate::ops::Packages;
+use crate::ops::RegistryOrIndex;
 use crate::sources::source::QueryKind;
 use crate::sources::source::Source;
 use crate::sources::SourceConfigMap;
@@ -45,7 +46,6 @@ use crate::CargoResult;
 use crate::GlobalContext;
 
 use super::super::check_dep_has_version;
-use super::RegistryOrIndex;
 
 pub struct PublishOpts<'gctx> {
     pub gctx: &'gctx GlobalContext,
@@ -90,21 +90,20 @@ pub fn publish(ws: &Workspace<'_>, opts: &PublishOpts<'_>) -> CargoResult<()> {
     if multi_package_mode {
         publish_multi(ws, pkgs, opts)
     } else {
-        publish_one(ws, &mut pkgs, opts)
+        // Double check. It is safe theoretically, unless logic has updated.
+        assert_eq!(pkgs.len(), 1);
+        let (pkg, cli_features) = pkgs.pop().unwrap();
+        publish_one(ws, pkg, cli_features, opts)
     }
 }
 
 /// To be removed when package_workspace is stabilized.
 fn publish_one(
     ws: &Workspace<'_>,
-    pkgs: &mut Vec<(&Package, CliFeatures)>,
+    pkg: &Package,
+    cli_features: CliFeatures,
     opts: &PublishOpts<'_>,
 ) -> CargoResult<()> {
-    // Double check. It is safe theoretically, unless logic has updated.
-    assert_eq!(pkgs.len(), 1);
-
-    let (pkg, cli_features) = pkgs.pop().unwrap();
-
     let mut publish_registry = match opts.reg_or_index.as_ref() {
         Some(RegistryOrIndex::Registry(registry)) => Some(registry.clone()),
         _ => None,
@@ -115,8 +114,6 @@ fn publish_one(
             // even though there is no registry specified in the command.
             let default_registry = &allowed_registries[0];
             if default_registry != CRATES_IO_REGISTRY {
-                // TODO: We need this in publish_multi as well.
-
                 // Don't change the registry for crates.io and don't warn the user.
                 // crates.io will be defaulted even without this.
                 opts.gctx.shell().note(&format!(
@@ -251,6 +248,16 @@ fn publish_multi(
     // but not *completely* (e.g. in that recent publish = false issue)
     let reg_or_index =
         ops::cargo_package::infer_registry(&just_pkgs, opts.reg_or_index.clone(), true)?;
+
+    if let Some(RegistryOrIndex::Registry(ref registry)) = reg_or_index {
+        if registry != CRATES_IO_REGISTRY {
+            // Don't warn for crates.io.
+            opts.gctx.shell().note(&format!(
+                "found `{}` as only allowed registry. Publishing to it automatically.",
+                registry
+            ))?;
+        }
+    }
 
     let pkg_dep_graph = ops::cargo_package::package_with_dep_graph(
         ws,

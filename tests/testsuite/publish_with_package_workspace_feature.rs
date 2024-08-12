@@ -159,6 +159,7 @@ fn simple_publish_with_http() {
     p.cargo("publish -Zpackage-workspace --no-verify --token sekrit --registry dummy-registry")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
+[NOTE] found `dummy-registry` as only allowed registry. Publishing to it automatically.
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
@@ -790,6 +791,7 @@ fn registry_not_in_publish_list() {
         .arg("alternative")
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [ERROR] registry index was not found in any configuration: `alternative`
 
 "#]])
@@ -859,6 +861,7 @@ fn publish_allowed_registry() {
     p.cargo("publish -Zpackage-workspace --registry alternative")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 5 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [VERIFYING] foo v0.0.1 ([ROOT]/foo)
@@ -920,6 +923,7 @@ fn publish_implicitly_to_only_allowed_registry() {
     p.cargo("publish -Zpackage-workspace")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 5 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [VERIFYING] foo v0.0.1 ([ROOT]/foo)
@@ -1093,6 +1097,7 @@ fn publish_with_crates_io_explicit() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [ERROR] registry index was not found in any configuration: `alternative`
 
 "#]])
@@ -2245,6 +2250,7 @@ fn api_error_json() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] `alternative` index
@@ -2294,6 +2300,7 @@ fn api_error_200() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] `alternative` index
@@ -2343,6 +2350,7 @@ fn api_error_code() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] `alternative` index
@@ -2401,6 +2409,7 @@ fn api_curl_error() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] `alternative` index
@@ -2450,6 +2459,7 @@ fn api_other_error() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
+[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] `alternative` index
@@ -2578,13 +2588,13 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] crates.io index
-[UPLOADING] li v0.0.1 ([ROOT]/foo/li)
-[UPLOADING] bar v0.0.1 ([ROOT]/foo/bar)
+[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
+[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
 [UPLOADED] bar v0.0.1, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `bar v0.0.1, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] li v0.0.1 at registry `crates-io`
-[PUBLISHED] bar v0.0.1 at registry `crates-io`
+[PUBLISHED] [..] v0.0.1 at registry `crates-io`
+[PUBLISHED] [..] v0.0.1 at registry `crates-io`
 
 "#]])
         .run();
@@ -2744,8 +2754,8 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] crates.io index
-[UPLOADING] [..] v0.0.1 ([ROOT]/foo/li)
-[UPLOADING] [..] v0.0.1 ([ROOT]/foo/foo)
+[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
+[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
 [UPLOADED] foo v0.0.1, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `foo v0.0.1, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.

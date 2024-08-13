@@ -3225,7 +3225,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [UPLOADED] delay v0.0.1 to registry `crates-io`
 [NOTE] waiting for `delay v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[WARNING] timed out waiting for `<short_pkg_description>` to be available in registry `crates-io`
+[WARNING] timed out waiting for `delay v0.0.1` to be available in registry `crates-io`
 [NOTE] the registry may have a backlog that is delaying making the crate available. The crate should be available soon.
 
 "#]])

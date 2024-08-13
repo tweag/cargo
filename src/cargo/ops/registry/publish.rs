@@ -453,7 +453,7 @@ fn wait_for_publish(
         if timeout < elapsed {
             // TODO: update the warning to allow multiple packages
             gctx.shell().warn(format!(
-                "timed out waiting for `<short_pkg_description>` to be available in {source_description}",
+                "timed out waiting for `{short_pkg_description}` to be available in {source_description}",
             ))?;
             gctx.shell().note(
                 "the registry may have a backlog that is delaying making the \

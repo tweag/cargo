@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::File;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -295,6 +297,7 @@ fn publish_multi(
         verify_dependencies(pkg, &registry, source_ids.original)?;
 
         if !opts.dry_run {
+            tarball.file().seek(SeekFrom::Start(0))?;
             let hash = cargo_util::Sha256::new()
                 .update_file(tarball.file())?
                 .finish_hex();

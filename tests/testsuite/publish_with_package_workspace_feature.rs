@@ -203,11 +203,12 @@ fn simple_publish_with_asymmetric() {
     p.cargo("publish -Zpackage-workspace --no-verify -Zasymmetric-token --registry dummy-registry")
         .masquerade_as_nightly_cargo(&["asymmetric-token"])
         .with_stderr_data(str![[r#"
-[UPDATING] `dummy-registry` index
+[NOTE] found `dummy-registry` as only allowed registry. Publishing to it automatically.
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[UPDATING] `dummy-registry` index
 [UPLOADING] foo v0.0.1 ([ROOT]/foo)
 [UPLOADED] foo v0.0.1 to registry `dummy-registry`
 [NOTE] waiting for `foo v0.0.1` to be available at registry `dummy-registry`.
@@ -3347,11 +3348,6 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPDATING] crates.io index
 [UPLOADING] delay v0.0.1 ([ROOT]/foo)
-[UPLOADED] delay v0.0.1 to registry `crates-io`
-[NOTE] waiting for `delay v0.0.1` to be available at registry `crates-io`.
-You may press ctrl-c to skip waiting; the crate should be available shortly.
-[WARNING] timed out waiting for `<short_pkg_description>` to be available in registry `crates-io`
-[NOTE] the registry may have a backlog that is delaying making the crate available. The crate should be available soon.
 [UPLOADED] delay v0.0.1 to registry `crates-io`
 [NOTE] waiting for `delay v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.

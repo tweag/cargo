@@ -2631,7 +2631,8 @@ You may press ctrl-c to skip waiting; the crate should be available shortly.
 "#]])
         .run();
 
-    validate_upload_li();
+    // TODO: Flaky. Only works when li happened to be published last.
+    // validate_upload_li();
 }
 
 #[cargo_test]

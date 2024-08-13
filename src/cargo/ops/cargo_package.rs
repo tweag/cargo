@@ -14,7 +14,7 @@ use crate::core::resolver::HasDevUnits;
 use crate::core::{Feature, PackageIdSpecQuery, Shell, Verbosity, Workspace};
 use crate::core::{Package, PackageId, PackageSet, Resolve, SourceId};
 use crate::sources::registry::index::{IndexPackage, RegistryDependency};
-use crate::sources::{PathSource, CRATES_IO_REGISTRY};
+use crate::sources::{PathSource, SourceConfigMap, CRATES_IO_REGISTRY};
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
 use crate::util::errors::CargoResult;
@@ -294,6 +294,7 @@ fn do_package<'a>(
     ws: &Workspace<'_>,
     opts: &PackageOpts<'a>,
 ) -> CargoResult<Vec<(Package, PackageOpts<'a>, FileLock)>> {
+    let gctx = ws.gctx();
     let specs = &opts.to_package.to_package_id_specs(ws)?;
     // If -p is used, we should check spec is matched with the members (See #13719)
     if let ops::Packages::Packages(_) = opts.to_package {
@@ -314,12 +315,27 @@ fn do_package<'a>(
 
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
     let publish_reg = infer_registry(&just_pkgs, opts.reg_or_index.clone())?;
-    let publish_reg = ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref())?.replacement;
-    debug!("packaging for registry {publish_reg}");
+
+    // TODO: This breaks the publish_lockfile tests:
+    // let publish_reg = ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref())?.replacement;
+    // Using the old code instead:
+
+    let sid = match publish_reg {
+        None => SourceId::crates_io(gctx)?,
+        Some(RegistryOrIndex::Registry(r)) => SourceId::alt_registry(gctx, &r)?,
+        Some(RegistryOrIndex::Index(url)) => SourceId::for_registry(&url)?,
+    };
+
+    // Load source replacements that are built-in to Cargo.
+    let sid = SourceConfigMap::empty(gctx)?
+        .load(sid, &HashSet::new())?
+        .replaced_source_id();
+
+    debug!("packaging for registry {sid}");
 
     let mut local_reg = if ws.gctx().cli_unstable().package_workspace {
         let reg_dir = ws.target_dir().join("package").join("tmp-registry");
-        Some(TmpRegistry::new(ws.gctx(), reg_dir, publish_reg)?)
+        Some(TmpRegistry::new(ws.gctx(), reg_dir, sid)?)
     } else {
         None
     };

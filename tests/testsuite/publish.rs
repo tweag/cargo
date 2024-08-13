@@ -3511,6 +3511,7 @@ fn workspace_with_local_deps_nightly() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
+[UPDATING] crates.io index
 [PACKAGING] level3 v0.0.1 ([ROOT]/foo/level3)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [PACKAGING] level2 v0.0.1 ([ROOT]/foo/level2)
@@ -3534,7 +3535,6 @@ fn workspace_with_local_deps_nightly() {
 [COMPILING] level2 v0.0.1
 [COMPILING] level1 v0.0.1 ([ROOT]/foo/target/package/level1-0.0.1)
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
-[UPDATING] crates.io index
 [UPLOADING] level3 v0.0.1 ([ROOT]/foo/level3)
 [UPLOADED] level3 v0.0.1 to registry `crates-io`
 [NOTE] waiting for `level3 v0.0.1` to be available at registry `crates-io`.
@@ -3600,6 +3600,7 @@ fn workspace_parallel() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
         .with_stderr_data(str![[r#"
+[UPDATING] crates.io index
 [PACKAGING] a v0.0.1 ([ROOT]/foo/a)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [PACKAGING] b v0.0.1 ([ROOT]/foo/b)
@@ -3610,7 +3611,6 @@ fn workspace_parallel() {
 [VERIFYING] b v0.0.1 ([ROOT]/foo/b)
 [COMPILING] b v0.0.1 ([ROOT]/foo/target/package/b-0.0.1)
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
-[UPDATING] crates.io index
 [UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
 [..]
 [..]

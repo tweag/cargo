@@ -2571,8 +2571,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [UPLOADED] bar v0.0.1, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `bar v0.0.1, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] li v0.0.1 at registry `crates-io`
-[PUBLISHED] bar v0.0.1 at registry `crates-io`
+[PUBLISHED] bar v0.0.1, li v0.0.1 at registry `crates-io`
 
 "#]])
         .run();
@@ -2627,8 +2626,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [UPLOADED] foo v0.1.0, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `foo v0.1.0, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] li v0.0.1 at registry `crates-io`
-[PUBLISHED] foo v0.1.0 at registry `crates-io`
+[PUBLISHED] foo v0.1.0, li v0.0.1 at registry `crates-io`
 
 "#]])
         .run();
@@ -2851,8 +2849,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [UPLOADED] li v0.0.1, lii v0.0.1 to registry `crates-io`
 [NOTE] waiting for `li v0.0.1, lii v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] lii v0.0.1 at registry `crates-io`
-[PUBLISHED] li v0.0.1 at registry `crates-io`
+[PUBLISHED] li v0.0.1, lii v0.0.1 at registry `crates-io`
 
 "#]])
         .run();

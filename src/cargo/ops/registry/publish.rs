@@ -331,10 +331,10 @@ fn publish_multi(
 
     while !outstanding.is_empty() && !timed_out {
         if !ready.is_empty() {
-            let short_pkg_description = ready.iter().map(PackageId::to_string).sorted().join(", ");
-            opts.gctx
-                .shell()
-                .status("Uploading", short_pkg_description)?;
+            opts.gctx.shell().status(
+                "Uploading",
+                ready.iter().map(PackageId::to_string).sorted().join(", "),
+            )?;
         }
 
         for pkg_id in &ready {
@@ -466,8 +466,12 @@ fn wait_for_publish(
         progress.tick_now(elapsed.as_secs() as usize, max, "")?;
         std::thread::sleep(sleep_time);
     };
-    for pkg in &available {
-        let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+    if !available.is_empty() {
+        let short_pkg_description = available
+            .iter()
+            .map(|pkg| format!("{} v{}", pkg.name(), pkg.version()))
+            .sorted()
+            .join(", ");
         gctx.shell().status(
             "Published",
             format!("{short_pkg_description} at {source_description}"),

@@ -330,10 +330,15 @@ fn publish_multi(
     let mut timed_out = false;
 
     while !outstanding.is_empty() && !timed_out {
+        if !ready.is_empty() {
+            let short_pkg_description = ready.iter().map(PackageId::to_string).sorted().join(", ");
+            opts.gctx
+                .shell()
+                .status("Uploading", short_pkg_description)?;
+        }
+
         for pkg_id in &ready {
             let (pkg, (_features, tarball)) = &pkg_dep_graph.packages[pkg_id];
-            // TODO: Change this to one message for all in ready.
-            opts.gctx.shell().status("Uploading", pkg_id.to_string())?;
 
             transmit(
                 opts.gctx,

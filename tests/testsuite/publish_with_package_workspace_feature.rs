@@ -2567,13 +2567,12 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
-[UPLOADING] [..] v0.0.1 ([ROOT]/foo/[..])
+[UPLOADING] bar v0.0.1 ([ROOT]/foo/bar), li v0.0.1 ([ROOT]/foo/li)
 [UPLOADED] bar v0.0.1, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `bar v0.0.1, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] [..] v0.0.1 at registry `crates-io`
-[PUBLISHED] [..] v0.0.1 at registry `crates-io`
+[PUBLISHED] li v0.0.1 at registry `crates-io`
+[PUBLISHED] bar v0.0.1 at registry `crates-io`
 
 "#]])
         .run();
@@ -2624,8 +2623,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[UPLOADING] li v0.0.1 ([ROOT]/foo/li)
-[UPLOADING] foo v0.1.0 ([ROOT]/foo)
+[UPLOADING] foo v0.1.0 ([ROOT]/foo), li v0.0.1 ([ROOT]/foo/li)
 [UPLOADED] foo v0.1.0, li v0.0.1 to registry `crates-io`
 [NOTE] waiting for `foo v0.1.0, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
@@ -2849,8 +2847,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] lii v0.0.1 ([ROOT]/foo/lii)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[UPLOADING] lii v0.0.1 ([ROOT]/foo/lii)
-[UPLOADING] li v0.0.1 ([ROOT]/foo/li)
+[UPLOADING] li v0.0.1 ([ROOT]/foo/li), lii v0.0.1 ([ROOT]/foo/lii)
 [UPLOADED] li v0.0.1, lii v0.0.1 to registry `crates-io`
 [NOTE] waiting for `li v0.0.1, lii v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.

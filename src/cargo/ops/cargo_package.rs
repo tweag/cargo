@@ -313,6 +313,7 @@ fn do_package<'a>(
         // below, and will be validated during the verification step.
     }
 
+    // TODO: There is some duplication here, getting to `just_pkgs` here and in `publish.rs`.
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
     let publish_reg = infer_registry(&just_pkgs, opts.reg_or_index.clone())?;
 

@@ -129,7 +129,6 @@ fn publish_one(
         let reg_name = publish_registry
             .clone()
             .unwrap_or_else(|| CRATES_IO_REGISTRY.to_string());
-        // TODO: We need these error messages in publish_multi as well.
         if allowed_registries.is_empty() {
             bail!(
                 "`{}` cannot be published.\n\

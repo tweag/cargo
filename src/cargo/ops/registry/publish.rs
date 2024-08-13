@@ -271,6 +271,11 @@ fn publish_multi(
         Some(Operation::Read).filter(|_| !opts.dry_run),
     )?;
 
+    let specs = Packages::from_flags(
+        false,
+        vec![],
+        just_pkgs.iter().map(|p| p.name().to_string()).collect(),
+    )?;
     let pkg_dep_graph = ops::cargo_package::package_with_dep_graph(
         ws,
         &PackageOpts {
@@ -279,7 +284,7 @@ fn publish_multi(
             list: false,
             check_metadata: true,
             allow_dirty: opts.allow_dirty,
-            to_package: Packages::Default,
+            to_package: specs,
             targets: opts.targets.clone(),
             jobs: opts.jobs.clone(),
             keep_going: opts.keep_going,

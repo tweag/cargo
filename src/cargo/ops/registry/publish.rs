@@ -261,6 +261,16 @@ fn publish_multi(
         }
     }
 
+    let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
+    let mut registry = super::registry(
+        opts.gctx,
+        &source_ids,
+        opts.token.as_ref().map(Secret::as_deref),
+        reg_or_index.as_ref(),
+        true,
+        Some(Operation::Read).filter(|_| !opts.dry_run),
+    )?;
+
     let pkg_dep_graph = ops::cargo_package::package_with_dep_graph(
         ws,
         &PackageOpts {
@@ -276,16 +286,6 @@ fn publish_multi(
             cli_features: opts.cli_features.clone(),
             reg_or_index: reg_or_index.clone(),
         },
-    )?;
-
-    let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
-    let mut registry = super::registry(
-        opts.gctx,
-        &source_ids,
-        opts.token.as_ref().map(Secret::as_deref),
-        reg_or_index.as_ref(),
-        true,
-        Some(Operation::Read).filter(|_| !opts.dry_run),
     )?;
 
     // Validate all the packages before publishing any of them.

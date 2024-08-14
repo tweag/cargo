@@ -303,7 +303,6 @@ fn wait_for_publish(
 
         let elapsed = now.elapsed();
         if timeout < elapsed {
-            // TODO: update the warning to allow multiple packages
             gctx.shell().warn(format!(
                 "timed out waiting for {short_pkg_descriptions} to be available in {source_description}",
             ))?;

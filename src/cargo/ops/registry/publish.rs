@@ -218,15 +218,14 @@ fn publish_one(
         opts.dry_run,
     )?;
 
-    // Short does not include the registry name.
-    let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
-    let source_description = source_ids.original.to_string();
-    ws.gctx().shell().status(
-        "Uploaded",
-        format!("{short_pkg_description} to {source_description}"),
-    )?;
-
     if !opts.dry_run {
+        let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+        let source_description = source_ids.original.to_string();
+        ws.gctx().shell().status(
+            "Uploaded",
+            format!("{short_pkg_description} to {source_description}"),
+        )?;
+
         const DEFAULT_TIMEOUT: u64 = 60;
         let timeout = if opts.gctx.cli_unstable().publish_timeout {
             let timeout: Option<u64> = opts.gctx.get("publish.timeout")?;
@@ -355,13 +354,15 @@ fn publish_multi(
                 opts.dry_run,
             )?;
 
-            // Short does not include the registry name.
-            let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
-            let source_description = source_ids.original.to_string();
-            ws.gctx().shell().status(
-                "Uploaded",
-                format!("{short_pkg_description} to {source_description}"),
-            )?;
+            if !opts.dry_run {
+                // Short does not include the registry name.
+                let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+                let source_description = source_ids.original.to_string();
+                ws.gctx().shell().status(
+                    "Uploaded",
+                    format!("{short_pkg_description} to {source_description}"),
+                )?;
+            }
         }
 
         let finished = if opts.dry_run {
@@ -397,9 +398,7 @@ fn publish_multi(
                 // be confirmed.
                 break;
             } else {
-                let mut failed_list: Vec<_> = remaining.into_iter().collect();
-                failed_list.sort();
-                let failed_list = package_list(failed_list, "and");
+                let failed_list = package_list(remaining, "and");
                 bail!("failed to publish {failed_list} because we timed out waiting for dependencies.");
             }
         }
@@ -428,13 +427,9 @@ fn wait_for_publish(
     let sleep_time = Duration::from_secs(1);
     let max = timeout.as_secs() as usize;
     // Short does not include the registry name.
-    let short_pkg_description = pkgs
-        .iter()
-        .map(|p| format!("{} v{}", p.name(), p.version()))
-        .sorted()
-        .join(", ");
+    let short_pkg_descriptions = package_list(pkgs.iter().copied(), "or");
     gctx.shell().note(format!(
-        "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
+        "waiting for {short_pkg_descriptions} to be available at {source_description}.\n\
         You may press ctrl-c to skip waiting; the crate should be available shortly."
     ))?;
     let mut progress = Progress::with_style("Waiting", ProgressStyle::Ratio, gctx);
@@ -467,7 +462,7 @@ fn wait_for_publish(
         if timeout < elapsed {
             // TODO: update the warning to allow multiple packages
             gctx.shell().warn(format!(
-                "timed out waiting for `{short_pkg_description}` to be available in {source_description}",
+                "timed out waiting for {short_pkg_descriptions} to be available in {source_description}",
             ))?;
             gctx.shell().note(
                 "the registry may have a backlog that is delaying making the \
@@ -772,10 +767,11 @@ impl PublishOrder {
 // Format a collection of packages as a list, like "foo v0.1.0, bar v0.2.0, and baz v0.3.0".
 // The final separator (i.e. "and" in the previous example) can be chosen.
 fn package_list(pkgs: impl IntoIterator<Item = PackageId>, final_sep: &str) -> String {
-    let names: Vec<_> = pkgs
+    let mut names: Vec<_> = pkgs
         .into_iter()
-        .map(|pkg| format!("{} v{}", pkg.name(), pkg.version()))
+        .map(|pkg| format!("`{} v{}`", pkg.name(), pkg.version()))
         .collect();
+    names.sort();
 
     match &names[..] {
         [] => String::new(),

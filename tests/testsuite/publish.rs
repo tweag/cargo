@@ -734,7 +734,6 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPLOADING] foo v0.0.1 ([ROOT]/foo)
 [WARNING] aborting upload due to dry run
-[UPLOADED] foo v0.0.1 to registry `[ROOT]/registry`
 
 "#]])
         .run();
@@ -1388,7 +1387,6 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPLOADING] foo v0.0.1 ([ROOT]/foo)
 [WARNING] aborting upload due to dry run
-[UPLOADED] foo v0.0.1 to registry `crates-io`
 
 "#]])
         .run();
@@ -3329,7 +3327,7 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [WARNING] timed out waiting for `dep v0.0.1` to be available in registry `crates-io`
 [NOTE] the registry may have a backlog that is delaying making the crate available. The crate should be available soon.
-[ERROR] failed to publish main v0.0.1 and other v0.0.1 because we timed out waiting for dependencies.
+[ERROR] failed to publish `main v0.0.1` and `other v0.0.1` because we timed out waiting for dependencies.
 
 "#]])
         .run();
@@ -3715,9 +3713,9 @@ fn workspace_parallel() {
 [COMPILING] b v0.0.1 ([ROOT]/foo/target/package/b-0.0.1)
 [FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 [UPLOADING] a v0.0.1 ([ROOT]/foo/a), b v0.0.1 ([ROOT]/foo/b)
-[UPLOADED] a v0.0.1 to registry `crates-io`
 [UPLOADED] b v0.0.1 to registry `crates-io`
-[NOTE] waiting for `a v0.0.1, b v0.0.1` to be available at registry `crates-io`.
+[UPLOADED] a v0.0.1 to registry `crates-io`
+[NOTE] waiting for `a v0.0.1` or `b v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] a v0.0.1, b v0.0.1 at registry `crates-io`
 

@@ -3233,6 +3233,106 @@ You may press ctrl-c to skip waiting; the crate should be available shortly.
 }
 
 #[cargo_test]
+fn timeout_waiting_for_dependency_publish() {
+    // Publish doesn't happen within the timeout window.
+    let registry = registry::RegistryBuilder::new()
+        .http_api()
+        .delayed_index_update(20)
+        .build();
+
+    let p = project()
+        .file(
+            "Cargo.toml",
+            r#"
+            [workspace]
+            members = ["main", "other", "dep"]
+        "#,
+        )
+        .file(
+            "main/Cargo.toml",
+            r#"
+                [package]
+                name = "main"
+                version = "0.0.1"
+                edition = "2015"
+                authors = []
+                license = "MIT"
+                description = "foo"
+
+                [dependencies]
+                dep = { version = "0.0.1", path = "../dep" }
+            "#,
+        )
+        .file("main/src/main.rs", "fn main() {}")
+        .file(
+            "other/Cargo.toml",
+            r#"
+                [package]
+                name = "other"
+                version = "0.0.1"
+                edition = "2015"
+                authors = []
+                license = "MIT"
+                description = "foo"
+
+                [dependencies]
+                dep = { version = "0.0.1", path = "../dep" }
+            "#,
+        )
+        .file("other/src/main.rs", "fn main() {}")
+        .file(
+            "dep/Cargo.toml",
+            r#"
+                [package]
+                name = "dep"
+                version = "0.0.1"
+                edition = "2015"
+                authors = []
+                license = "MIT"
+                description = "foo"
+            "#,
+        )
+        .file("dep/src/lib.rs", "")
+        .file(
+            ".cargo/config.toml",
+            r#"
+                [publish]
+                timeout = 2
+            "#,
+        )
+        .build();
+
+    p.cargo("publish --no-verify -Zpublish-timeout -Zpackage-workspace")
+        .replace_crates_io(registry.index_url())
+        .masquerade_as_nightly_cargo(&["publish-timeout", "package-workspace"])
+        .with_status(101)
+        .with_stderr_data(str![[r#"
+[UPDATING] crates.io index
+[WARNING] manifest has no documentation, homepage or repository.
+See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
+[PACKAGING] dep v0.0.1 ([ROOT]/foo/dep)
+[PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[WARNING] manifest has no documentation, homepage or repository.
+See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
+[PACKAGING] main v0.0.1 ([ROOT]/foo/main)
+[PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[WARNING] manifest has no documentation, homepage or repository.
+See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
+[PACKAGING] other v0.0.1 ([ROOT]/foo/other)
+[PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[UPLOADING] dep v0.0.1 ([ROOT]/foo/dep)
+[UPLOADED] dep v0.0.1 to registry `crates-io`
+[NOTE] waiting for `dep v0.0.1` to be available at registry `crates-io`.
+You may press ctrl-c to skip waiting; the crate should be available shortly.
+[WARNING] timed out waiting for `dep v0.0.1` to be available in registry `crates-io`
+[NOTE] the registry may have a backlog that is delaying making the crate available. The crate should be available soon.
+[ERROR] failed to publish main v0.0.1 and other v0.0.1 because we timed out waiting for dependencies.
+
+"#]])
+        .run();
+}
+
+#[cargo_test]
 fn wait_for_git_publish() {
     // Slow publish to an index with a git index.
     let registry = registry::RegistryBuilder::new()

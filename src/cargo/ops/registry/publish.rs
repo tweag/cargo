@@ -260,6 +260,8 @@ fn publish_multi(
         }
     }
 
+    // This is only used to confirm that we can create a token before we build the package.
+    // This causes the credential provider to be called an extra time, but keeps the same order of errors.
     let source_ids = super::get_source_id(opts.gctx, reg_or_index.as_ref())?;
     let mut registry = super::registry(
         opts.gctx,
@@ -293,42 +295,15 @@ fn publish_multi(
     )?;
 
     // Validate all the packages before publishing any of them.
-    for (pkg, (_cli_features, tarball)) in pkg_dep_graph.packages.values() {
-        // This is only used to confirm that we can create a token before we build the package.
-        // This causes the credential provider to be called an extra time, but keeps the same order of errors.
-        let ver = pkg.version().to_string();
-
+    for (pkg, _) in pkg_dep_graph.packages.values() {
         verify_dependencies(pkg, &registry, source_ids.original)?;
-
-        if !opts.dry_run {
-            tarball.file().seek(SeekFrom::Start(0))?;
-            let hash = cargo_util::Sha256::new()
-                .update_file(tarball.file())?
-                .finish_hex();
-            let operation = Operation::Publish {
-                name: pkg.name().as_str(),
-                vers: &ver,
-                cksum: &hash,
-            };
-            // FIXME: we're setting the token on each package, so later tokens will override
-            // earlier ones. We could collect them all, and error if they aren't all the same?
-            // Or we could support per-package tokens.
-            registry.set_token(Some(auth::auth_token(
-                &opts.gctx,
-                &source_ids.original,
-                None,
-                operation,
-                vec![],
-                false,
-            )?));
-        }
     }
 
     let (mut order, mut ready) = PublishOrder::new(&pkg_dep_graph.graph);
-    let mut outstanding: HashSet<_> = ready.iter().copied().collect();
-    let mut timed_out = false;
+    let mut to_confirm: HashSet<_> = ready.iter().copied().collect();
+    let mut remaining: HashSet<_> = just_pkgs.iter().map(|pkg| pkg.package_id()).collect();
 
-    while !outstanding.is_empty() && !timed_out {
+    while !to_confirm.is_empty() {
         if !ready.is_empty() {
             opts.gctx.shell().status(
                 "Uploading",
@@ -338,6 +313,28 @@ fn publish_multi(
 
         for pkg_id in &ready {
             let (pkg, (_features, tarball)) = &pkg_dep_graph.packages[pkg_id];
+
+            if !opts.dry_run {
+                let ver = pkg.version().to_string();
+
+                tarball.file().seek(SeekFrom::Start(0))?;
+                let hash = cargo_util::Sha256::new()
+                    .update_file(tarball.file())?
+                    .finish_hex();
+                let operation = Operation::Publish {
+                    name: pkg.name().as_str(),
+                    vers: &ver,
+                    cksum: &hash,
+                };
+                registry.set_token(Some(auth::auth_token(
+                    &opts.gctx,
+                    &source_ids.original,
+                    None,
+                    operation,
+                    vec![],
+                    false,
+                )?));
+            }
 
             transmit(
                 opts.gctx,
@@ -350,17 +347,16 @@ fn publish_multi(
             )?;
 
             // Short does not include the registry name.
-            // let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
-            // let source_description = source_ids.original.to_string();
-            // TODO: figure out where to print this
-            // ws.gctx().shell().status(
-            //     "Uploaded",
-            //     format!("{short_pkg_description} to {source_description}"),
-            // )?;
+            let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+            let source_description = source_ids.original.to_string();
+            ws.gctx().shell().status(
+                "Uploaded",
+                format!("{short_pkg_description} to {source_description}"),
+            )?;
         }
 
         let finished = if opts.dry_run {
-            ready
+            ready.clone()
         } else {
             const DEFAULT_TIMEOUT: u64 = 60;
             let timeout = if opts.gctx.cli_unstable().publish_timeout {
@@ -371,23 +367,33 @@ fn publish_multi(
             };
             if 0 < timeout {
                 let timeout = Duration::from_secs(timeout);
-                wait_for_publish(opts.gctx, source_ids.original, &outstanding, timeout)?
+                wait_for_publish(opts.gctx, source_ids.original, &to_confirm, timeout)?
             } else {
-                // FIXME: Infinite loop if timeout is 0, and no package ever
-                // finishes. On our first timeout, we need to abort publishing
-                // if we have more packages in the queue. It doesn't make sense
-                // to continue.
-
-                // TODO: For now we'll just break the infinite loop.
-                timed_out = true;
                 Vec::new()
             }
         };
+
         for id in &finished {
-            outstanding.remove(id);
+            to_confirm.remove(id);
+            remaining.remove(id);
         }
+        if finished.is_empty() {
+            // If nothing finished, it means we timed out while waiting for confirmation.
+            // This is fine as long as there was nothing waiting for dependencies.
+            for id in &ready {
+                remaining.remove(id);
+            }
+
+            if !remaining.is_empty() {
+                let mut failed_list: Vec<_> = remaining.into_iter().collect();
+                failed_list.sort();
+                let failed_list = package_list(failed_list, "and");
+                bail!("failed to publish {failed_list} because we timed out waiting for dependencies.");
+            }
+        }
+
         ready = order.mark_published(finished);
-        outstanding.extend(ready.iter().copied());
+        to_confirm.extend(ready.iter().copied());
     }
 
     Ok(())
@@ -415,10 +421,6 @@ fn wait_for_publish(
         .map(|p| format!("{} v{}", p.name(), p.version()))
         .sorted()
         .join(", ");
-    gctx.shell().status(
-        "Uploaded",
-        format!("{short_pkg_description} to {source_description}"),
-    )?;
     gctx.shell().note(format!(
         "waiting for `{short_pkg_description}` to be available at {source_description}.\n\
         You may press ctrl-c to skip waiting; the crate should be available shortly."
@@ -752,6 +754,24 @@ impl PublishOrder {
             }
         }
         ret
+    }
+}
+
+// Format a collection of packages as a list, like "foo v0.1.0, bar v0.2.0, and baz v0.3.0".
+// The final separator (i.e. "and" in the previous example) can be chosen.
+fn package_list(pkgs: impl IntoIterator<Item = PackageId>, final_sep: &str) -> String {
+    let names: Vec<_> = pkgs
+        .into_iter()
+        .map(|pkg| format!("{} v{}", pkg.name(), pkg.version()))
+        .collect();
+
+    match &names[..] {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a} {final_sep} {b}"),
+        [names @ .., last] => {
+            format!("{}, {final_sep} {last}", names.join(", "))
+        }
     }
 }
 

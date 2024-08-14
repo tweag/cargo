@@ -834,7 +834,7 @@ fn rustdoc_diagnostics_works() {
 [RUNNING] `[..]rustc [..]-Zremap-path-scope=diagnostics --remap-path-prefix=[ROOT]/home/.cargo/registry/src= --remap-path-prefix=[..]/lib/rustlib/src/rust=/rustc/[..]`
 ...
 [WARNING] unopened HTML tag `script`
- --> -[..]/bar-0.0.1/src/lib.rs:2:17
+ --> [..]/bar-0.0.1/src/lib.rs:2:17
 ...
 "#]])
         .run();

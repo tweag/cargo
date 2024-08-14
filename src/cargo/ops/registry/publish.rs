@@ -253,20 +253,26 @@ fn publish_multi(
     opts: &PublishOpts<'_>,
 ) -> CargoResult<()> {
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
-    // FIXME: the package-vs-publish logic for validating registries should be almost the same,
-    // but not *completely* (e.g. in that recent publish = false issue)
-    let reg_or_index =
-        ops::cargo_package::infer_registry(&just_pkgs, opts.reg_or_index.clone(), true)?;
-
-    if let Some(RegistryOrIndex::Registry(ref registry)) = reg_or_index {
-        if registry != CRATES_IO_REGISTRY {
-            // Don't warn for crates.io.
-            opts.gctx.shell().note(&format!(
-                "found `{}` as only allowed registry. Publishing to it automatically.",
-                registry
-            ))?;
+    let reg_or_index = match opts.reg_or_index.clone() {
+        Some(r) => {
+            validate_registry(&just_pkgs, Some(&r))?;
+            Some(r)
         }
-    }
+        None => {
+            let reg = super::infer_registry(&just_pkgs)?;
+            validate_registry(&just_pkgs, reg.as_ref())?;
+            if let Some(RegistryOrIndex::Registry(ref registry)) = &reg {
+                if registry != CRATES_IO_REGISTRY {
+                    // Don't warn for crates.io.
+                    opts.gctx.shell().note(&format!(
+                        "found `{}` as only allowed registry. Publishing to it automatically.",
+                        registry
+                    ))?;
+                }
+            }
+            reg
+        }
+    };
 
     // This is only used to confirm that we can create a token before we build the package.
     // This causes the credential provider to be called an extra time, but keeps the same order of errors.
@@ -781,6 +787,40 @@ fn package_list(pkgs: impl IntoIterator<Item = PackageId>, final_sep: &str) -> S
             format!("{}, {final_sep} {last}", names.join(", "))
         }
     }
+}
+
+fn validate_registry(pkgs: &[&Package], reg_or_index: Option<&RegistryOrIndex>) -> CargoResult<()> {
+    for pkg in pkgs {
+        if pkg.publish() == &Some(Vec::new()) {
+            bail!(
+                    "`{}` cannot be published.\n\
+                    `package.publish` must be set to `true` or a non-empty list in Cargo.toml to publish.",
+                    pkg.name(),
+                );
+        }
+    }
+
+    let reg_name = match reg_or_index {
+        Some(RegistryOrIndex::Registry(r)) => Some(r.as_str()),
+        None => Some(CRATES_IO_REGISTRY),
+        Some(RegistryOrIndex::Index(_)) => None,
+    };
+    if let Some(reg_name) = reg_name {
+        for pkg in pkgs {
+            if let Some(allowed) = pkg.publish().as_ref() {
+                if !allowed.iter().any(|a| a == reg_name) {
+                    bail!(
+                        "`{}` cannot be published.\n\
+                         The registry `{}` is not listed in the `package.publish` value in Cargo.toml.",
+                        pkg.name(),
+                        reg_name
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

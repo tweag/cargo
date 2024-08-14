@@ -159,7 +159,6 @@ fn simple_publish_with_http() {
     p.cargo("publish -Zpackage-workspace --no-verify --token sekrit --registry dummy-registry")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
-[NOTE] found `dummy-registry` as only allowed registry. Publishing to it automatically.
 [UPDATING] `dummy-registry` index
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
@@ -203,7 +202,6 @@ fn simple_publish_with_asymmetric() {
     p.cargo("publish -Zpackage-workspace --no-verify -Zasymmetric-token --registry dummy-registry")
         .masquerade_as_nightly_cargo(&["asymmetric-token"])
         .with_stderr_data(str![[r#"
-[NOTE] found `dummy-registry` as only allowed registry. Publishing to it automatically.
 [UPDATING] `dummy-registry` index
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
@@ -791,8 +789,8 @@ fn registry_not_in_publish_list() {
         .arg("alternative")
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
-[ERROR] registry index was not found in any configuration: `alternative`
+[ERROR] `foo` cannot be published.
+The registry `alternative` is not listed in the `package.publish` value in Cargo.toml.
 
 "#]])
         .run();
@@ -861,7 +859,6 @@ fn publish_allowed_registry() {
     p.cargo("publish -Zpackage-workspace --registry alternative")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 5 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -1022,9 +1019,7 @@ fn publish_fail_with_no_registry_specified() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[UPDATING] crates.io index
-[ERROR] no token found, please run `cargo login`
-or use environment variable CARGO_REGISTRY_TOKEN
+[ERROR] --registry is required to disambiguate between "alternative" or "test" registries
 
 "#]])
         .run();
@@ -1087,8 +1082,8 @@ fn publish_with_crates_io_explicit() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
-[ERROR] registry index was not found in any configuration: `alternative`
+[ERROR] `foo` cannot be published.
+The registry `alternative` is not listed in the `package.publish` value in Cargo.toml.
 
 "#]])
         .run();
@@ -2229,7 +2224,6 @@ fn api_error_json() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -2279,7 +2273,6 @@ fn api_error_200() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -2329,7 +2322,6 @@ fn api_error_code() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -2388,7 +2380,6 @@ fn api_curl_error() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -2438,7 +2429,6 @@ fn api_other_error() {
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .with_status(101)
         .with_stderr_data(str![[r#"
-[NOTE] found `alternative` as only allowed registry. Publishing to it automatically.
 [UPDATING] `alternative` index
 [PACKAGING] foo v0.0.1 ([ROOT]/foo)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -2557,7 +2547,8 @@ fn with_duplicate_spec_in_members() {
     p.cargo("publish -Zpackage-workspace --no-verify")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
-        .with_stderr_data(str![[r#"
+        .with_stderr_data(
+            str![[r#"
 [UPDATING] crates.io index
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
@@ -2574,7 +2565,9 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] bar v0.0.1, li v0.0.1 at registry `crates-io`
 
-"#]])
+"#]]
+            .unordered(),
+        )
         .run();
 }
 
@@ -2841,7 +2834,8 @@ fn in_package_workspace_found_multiple() {
     p.cargo("publish -Zpackage-workspace -p li* --no-verify")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
-        .with_stderr_data(str![[r#"
+        .with_stderr_data(
+            str![[r#"
 [UPDATING] crates.io index
 [WARNING] manifest has no documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
@@ -2858,7 +2852,9 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] li v0.0.1, lii v0.0.1 at registry `crates-io`
 
-"#]])
+"#]]
+            .unordered(),
+        )
         .run();
 }
 

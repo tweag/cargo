@@ -13,6 +13,7 @@ use crate::core::resolver::CliFeatures;
 use crate::core::resolver::HasDevUnits;
 use crate::core::{Feature, PackageIdSpecQuery, Shell, Verbosity, Workspace};
 use crate::core::{Package, PackageId, PackageSet, Resolve, SourceId};
+use crate::ops::registry::infer_registry;
 use crate::sources::registry::index::{IndexPackage, RegistryDependency};
 use crate::sources::{PathSource, SourceConfigMap, CRATES_IO_REGISTRY};
 use crate::util::cache_lock::CacheLockMode;
@@ -180,64 +181,23 @@ fn create_package(
 /// packages that we're packaging: if we're packaging foo-bin and foo-lib, and foo-bin
 /// depends on foo-lib, then the foo-lib entry in foo-bin's lockfile will depend on the
 /// registry that we're building packages for.
-pub(crate) fn infer_registry(
+pub(crate) fn validate_registry(
     pkgs: &[&Package],
-    reg_or_index: Option<RegistryOrIndex>,
+    reg_or_index: CargoResult<Option<RegistryOrIndex>>,
 ) -> CargoResult<Option<RegistryOrIndex>> {
-    let reg_or_index = match reg_or_index {
-        Some(r) => r,
-        None => {
-            if pkgs[1..].iter().all(|p| p.publish() == pkgs[0].publish()) {
-                // If all packages have the same publish settings, we take that as the default.
-                match pkgs[0].publish().as_deref() {
-                    Some([unique_pkg_reg]) => RegistryOrIndex::Registry(unique_pkg_reg.to_owned()),
-                    None | Some([]) => RegistryOrIndex::Registry(CRATES_IO_REGISTRY.to_owned()),
-                    Some([reg, ..]) if pkgs.len() == 1 => {
-                        // For backwards compatibility, avoid erroring if there's only one package.
-                        // The registry doesn't affect packaging in this case.
-                        RegistryOrIndex::Registry(reg.to_owned())
-                    }
-                    Some(regs) => {
-                        let mut regs: Vec<_> = regs.iter().map(|s| format!("\"{}\"", s)).collect();
-                        regs.sort();
-                        regs.dedup();
-                        // unwrap: the match block ensures that there's more than one reg.
-                        let (last_reg, regs) = regs.split_last().unwrap();
-                        bail!(
-                            "--registry is required to disambiguate between {} or {} registries",
-                            regs.join(", "),
-                            last_reg
-                        )
-                    }
-                }
-            } else {
-                let common_regs = pkgs
-                    .iter()
-                    // `None` means "all registries", so drop them instead of including them
-                    // in the intersection.
-                    .filter_map(|p| p.publish().as_deref())
-                    .map(|p| p.iter().collect::<HashSet<_>>())
-                    .reduce(|xs, ys| xs.intersection(&ys).cloned().collect())
-                    .unwrap_or_default();
-                if common_regs.is_empty() {
-                    bail!("conflicts between `package.publish` fields in the selected packages");
-                } else {
-                    bail!(
-                        "--registry is required because not all `package.publish` settings agree",
-                    );
-                }
-            }
-        }
-    };
-
     // Validate the registry against the packages' allow-lists. For backwards compatibility, we
     // skip this if only a single package is being published (because in that case the registry
     // doesn't affect the packaging step).
     if pkgs.len() > 1 {
-        if let RegistryOrIndex::Registry(reg_name) = &reg_or_index {
+        let reg_or_index = reg_or_index?;
+
+        let reg = reg_or_index
+            .clone()
+            .unwrap_or_else(|| RegistryOrIndex::Registry(CRATES_IO_REGISTRY.to_owned()));
+        if let RegistryOrIndex::Registry(reg_name) = reg {
             for pkg in pkgs {
                 if let Some(allowed) = pkg.publish().as_ref() {
-                    if !allowed.iter().any(|a| a == reg_name) {
+                    if !allowed.iter().any(|a| a == &reg_name) {
                         bail!(
                         "`{}` cannot be packaged.\n\
                          The registry `{}` is not listed in the `package.publish` value in Cargo.toml.",
@@ -248,23 +208,10 @@ pub(crate) fn infer_registry(
                 }
             }
         }
+        Ok(reg_or_index)
+    } else {
+        Ok(None)
     }
-
-    // FIXME: this is WIP logic for extra validation during publishing. Maybe it can be factored out into another function?
-    // But first let's figure out what extra validation is needed.
-    if false {
-        for pkg in pkgs {
-            if pkg.publish() == &Some(Vec::new()) {
-                bail!(
-                        "`{}` cannot be published.\n\
-                        `package.publish` must be set to `true` or a non-empty list in Cargo.toml to publish.",
-                        pkg.name(),
-                    );
-            }
-        }
-    }
-
-    Ok(Some(reg_or_index))
 }
 
 /// Packages an entire workspace.
@@ -315,7 +262,11 @@ fn do_package<'a>(
 
     // TODO: There is some duplication here, getting to `just_pkgs` here and in `publish.rs`.
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
-    let publish_reg = infer_registry(&just_pkgs, opts.reg_or_index.clone())?;
+    let publish_reg = match opts.reg_or_index.clone() {
+        Some(r) => Ok(Some(r)),
+        None => infer_registry(&just_pkgs),
+    };
+    let publish_reg = validate_registry(&just_pkgs, publish_reg)?;
 
     // TODO: This breaks the publish_lockfile tests:
     // let publish_reg = ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref())?.replacement;

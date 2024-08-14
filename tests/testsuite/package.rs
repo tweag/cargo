@@ -5997,9 +5997,14 @@ fn registry_not_in_publish_list() {
 
     p.cargo("package --registry alternative -Zpackage-workspace")
         .masquerade_as_nightly_cargo(&["package-workspace"])
-        .with_status(101)
         .with_stderr_data(str![[r#"
-[ERROR] registry index was not found in any configuration: `alternative`
+[WARNING] manifest has no documentation, homepage or repository.
+See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
+[PACKAGING] foo v0.0.1 ([ROOT]/foo)
+[PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
+[VERIFYING] foo v0.0.1 ([ROOT]/foo)
+[COMPILING] foo v0.0.1 ([ROOT]/foo/target/package/foo-0.0.1)
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
 
 "#]])
         .run();

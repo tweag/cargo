@@ -3700,7 +3700,8 @@ fn workspace_parallel() {
     p.cargo("publish -Zpackage-workspace")
         .masquerade_as_nightly_cargo(&["package-workspace"])
         .replace_crates_io(registry.index_url())
-        .with_stderr_data(str![[r#"
+        .with_stderr_data(
+            str![[r#"
 [UPDATING] crates.io index
 [PACKAGING] a v0.0.1 ([ROOT]/foo/a)
 [PACKAGED] 3 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
@@ -3719,6 +3720,8 @@ fn workspace_parallel() {
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] a v0.0.1, b v0.0.1 at registry `crates-io`
 
-"#]])
+"#]]
+            .unordered(),
+        )
         .run();
 }

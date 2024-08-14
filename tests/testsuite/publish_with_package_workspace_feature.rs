@@ -354,11 +354,9 @@ fn git_deps() {
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
-[WARNING] manifest has no documentation, homepage or repository.
-See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
-[ERROR] all dependencies must have a version specified when packaging.
+[ERROR] all dependencies must have a version specified when publishing.
 dependency `foo` does not specify a version
-Note: The packaged dependency will use the version from crates.io,
+Note: The published dependency will use the version from crates.io,
 the `git` specification will be removed from the dependency declaration.
 
 "#]])
@@ -397,11 +395,9 @@ fn path_dependency_no_version() {
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
-[WARNING] manifest has no documentation, homepage or repository.
-See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
-[ERROR] all dependencies must have a version specified when packaging.
+[ERROR] all dependencies must have a version specified when publishing.
 dependency `bar` does not specify a version
-Note: The packaged dependency will use the version from crates.io,
+Note: The published dependency will use the version from crates.io,
 the `path` specification will be removed from the dependency declaration.
 
 "#]])
@@ -2609,20 +2605,15 @@ fn in_package_workspace_with_members_with_features_old() {
         .with_stderr_data(
             str![[r#"
 [UPDATING] crates.io index
-[WARNING] manifest has no description, license, license-file, documentation, homepage or repository.
 See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
-[PACKAGING] foo v0.1.0 ([ROOT]/foo)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [WARNING] manifest has no documentation, homepage or repository.
-See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
-[PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
-[UPLOADING] foo v0.1.0 ([ROOT]/foo), li v0.0.1 ([ROOT]/foo/li)
 [UPLOADED] li v0.0.1 to registry `crates-io`
-[UPLOADED] foo v0.1.0 to registry `crates-io`
 You may press ctrl-c to skip waiting; the crate should be available shortly.
-[PUBLISHED] foo v0.1.0, li v0.0.1 at registry `crates-io`
-[NOTE] waiting for `foo v0.1.0` or `li v0.0.1` to be available at registry `crates-io`.
+[UPLOADING] li v0.0.1 ([ROOT]/foo/li)
+[NOTE] waiting for `li v0.0.1` to be available at registry `crates-io`.
+[PUBLISHED] li v0.0.1 at registry `crates-io`
 
 "#]]
             .unordered(),

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -15,7 +15,7 @@ use crate::core::{Feature, PackageIdSpecQuery, Shell, Verbosity, Workspace};
 use crate::core::{Package, PackageId, PackageSet, Resolve, SourceId};
 use crate::ops::registry::infer_registry;
 use crate::sources::registry::index::{IndexPackage, RegistryDependency};
-use crate::sources::{PathSource, SourceConfigMap, CRATES_IO_REGISTRY};
+use crate::sources::{PathSource, CRATES_IO_REGISTRY};
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
 use crate::util::errors::CargoResult;
@@ -241,7 +241,6 @@ fn do_package<'a>(
     ws: &Workspace<'_>,
     opts: &PackageOpts<'a>,
 ) -> CargoResult<Vec<(Package, PackageOpts<'a>, FileLock)>> {
-    let gctx = ws.gctx();
     let specs = &opts.to_package.to_package_id_specs(ws)?;
     // If -p is used, we should check spec is matched with the members (See #13719)
     if let ops::Packages::Packages(_) = opts.to_package {
@@ -250,7 +249,11 @@ fn do_package<'a>(
             spec.query(member_ids)?;
         }
     }
-    let pkgs = ws.members_with_features(specs, &opts.cli_features)?;
+    let mut pkgs = ws.members_with_features(specs, &opts.cli_features)?;
+
+    // In `members_with_features_old`, it will add "current" package (determined by the cwd)
+    // So we need filter
+    pkgs.retain(|(pkg, _feats)| specs.iter().any(|spec| spec.matches(pkg.package_id())));
 
     if ws.root().join("Cargo.lock").exists() {
         // Make sure the Cargo.lock is up-to-date and valid.
@@ -261,6 +264,7 @@ fn do_package<'a>(
     }
 
     // TODO: There is some duplication here, getting to `just_pkgs` here and in `publish.rs`.
+    let deps = local_deps(pkgs.iter().map(|(p, f)| ((*p).clone(), f.clone())));
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
     let publish_reg = match opts.reg_or_index.clone() {
         Some(r) => Ok(Some(r)),
@@ -268,31 +272,29 @@ fn do_package<'a>(
     };
     let publish_reg = validate_registry(&just_pkgs, publish_reg)?;
 
-    // TODO: This breaks the publish_lockfile tests:
-    // let publish_reg = ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref())?.replacement;
-    // Using the old code instead:
-
-    let sid = match publish_reg {
-        None => SourceId::crates_io(gctx)?,
-        Some(RegistryOrIndex::Registry(r)) => SourceId::alt_registry(gctx, &r)?,
-        Some(RegistryOrIndex::Index(url)) => SourceId::for_registry(&url)?,
+    let sid = match ops::registry::get_source_id(ws.gctx(), publish_reg.as_ref()) {
+        Ok(sid) => {
+            debug!("packaging for registry {}", sid.replacement);
+            Some(sid.replacement)
+        }
+        Err(e) => {
+            if deps.has_no_dependencies() {
+                // The publish registry doesn't matter unless there are local dependencies,
+                // so ignore any errors if we don't need it.
+                None
+            } else {
+                return Err(e);
+            }
+        }
     };
-
-    // Load source replacements that are built-in to Cargo.
-    let sid = SourceConfigMap::empty(gctx)?
-        .load(sid, &HashSet::new())?
-        .replaced_source_id();
-
-    debug!("packaging for registry {sid}");
 
     let mut local_reg = if ws.gctx().cli_unstable().package_workspace {
         let reg_dir = ws.target_dir().join("package").join("tmp-registry");
-        Some(TmpRegistry::new(ws.gctx(), reg_dir, sid)?)
+        sid.map(|sid| TmpRegistry::new(ws.gctx(), reg_dir, sid))
+            .transpose()?
     } else {
         None
     };
-
-    let deps = local_deps(pkgs.iter().map(|(p, f)| ((*p).clone(), f.clone())));
 
     // Packages need to be created in dependency order, because dependencies must
     // be added to our local overlay before we can create lockfiles that depend on them.
@@ -346,6 +348,12 @@ impl<T: Clone> LocalDependencies<T> {
             .into_iter()
             .map(|name| self.packages[&name].clone())
             .collect()
+    }
+
+    pub fn has_no_dependencies(&self) -> bool {
+        self.graph
+            .iter()
+            .all(|node| self.graph.edges(node).next().is_none())
     }
 }
 

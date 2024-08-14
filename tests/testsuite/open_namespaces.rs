@@ -351,19 +351,15 @@ fn publish_namespaced() {
         .file("src/lib.rs", "fn main() {}")
         .build();
 
+    // We'd like to have an error about namespaced packages not being publishable,
+    // but instead it fails early while trying to parse `foo::bar` as a package spec.
     p.cargo("publish")
         .masquerade_as_nightly_cargo(&["script", "open-namespaces"])
         .replace_crates_io(registry.index_url())
         .with_status(101)
         .with_stderr_data(str![[r#"
 [UPDATING] crates.io index
-[WARNING] manifest has no documentation, homepage or repository.
-See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info.
-[PACKAGING] foo::bar v0.0.1 ([ROOT]/foo)
-[ERROR] failed to prepare local package for uploading
-
-Caused by:
-  cannot publish with `open-namespaces`
+[ERROR] expected a version like "1.32"
 
 "#]])
         .run();

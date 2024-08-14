@@ -347,7 +347,6 @@ Caused by:
 }
 
 #[allow(deprecated)]
-#[ignore]
 #[cargo_test]
 fn net_err_suggests_fetch_with_cli() {
     let p = project()

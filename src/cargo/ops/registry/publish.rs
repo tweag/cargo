@@ -217,6 +217,15 @@ fn publish_one(
         source_ids.original,
         opts.dry_run,
     )?;
+
+    // Short does not include the registry name.
+    let short_pkg_description = format!("{} v{}", pkg.name(), pkg.version());
+    let source_description = source_ids.original.to_string();
+    ws.gctx().shell().status(
+        "Uploaded",
+        format!("{short_pkg_description} to {source_description}"),
+    )?;
+
     if !opts.dry_run {
         const DEFAULT_TIMEOUT: u64 = 60;
         let timeout = if opts.gctx.cli_unstable().publish_timeout {
@@ -379,12 +388,15 @@ fn publish_multi(
         }
         if finished.is_empty() {
             // If nothing finished, it means we timed out while waiting for confirmation.
-            // This is fine as long as there was nothing waiting for dependencies.
             for id in &ready {
                 remaining.remove(id);
             }
 
-            if !remaining.is_empty() {
+            if remaining.is_empty() {
+                // It's ok that we timed out, because nothing was waiting on dependencies to
+                // be confirmed.
+                break;
+            } else {
                 let mut failed_list: Vec<_> = remaining.into_iter().collect();
                 failed_list.sort();
                 let failed_list = package_list(failed_list, "and");

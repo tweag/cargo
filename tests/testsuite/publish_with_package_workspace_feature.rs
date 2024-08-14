@@ -2570,8 +2570,8 @@ See https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for
 [PACKAGING] li v0.0.1 ([ROOT]/foo/li)
 [PACKAGED] 4 files, [FILE_SIZE]B ([FILE_SIZE]B compressed)
 [UPLOADING] bar v0.0.1 ([ROOT]/foo/bar), li v0.0.1 ([ROOT]/foo/li)
-[UPLOADED] bar v0.0.1 to registry `crates-io`
 [UPLOADED] li v0.0.1 to registry `crates-io`
+[UPLOADED] bar v0.0.1 to registry `crates-io`
 [NOTE] waiting for `bar v0.0.1, li v0.0.1` to be available at registry `crates-io`.
 You may press ctrl-c to skip waiting; the crate should be available shortly.
 [PUBLISHED] bar v0.0.1, li v0.0.1 at registry `crates-io`

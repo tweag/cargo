@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -13,8 +13,9 @@ use crate::core::resolver::CliFeatures;
 use crate::core::resolver::HasDevUnits;
 use crate::core::{Feature, PackageIdSpecQuery, Shell, Verbosity, Workspace};
 use crate::core::{Package, PackageId, PackageSet, Resolve, SourceId};
+use crate::ops::registry::infer_registry;
 use crate::sources::registry::index::{IndexPackage, RegistryDependency};
-use crate::sources::{PathSource, SourceConfigMap, CRATES_IO_REGISTRY};
+use crate::sources::{PathSource, CRATES_IO_REGISTRY};
 use crate::util::cache_lock::CacheLockMode;
 use crate::util::context::JobsConfig;
 use crate::util::errors::CargoResult;
@@ -180,89 +181,35 @@ fn create_package(
 /// packages that we're packaging: if we're packaging foo-bin and foo-lib, and foo-bin
 /// depends on foo-lib, then the foo-lib entry in foo-bin's lockfile will depend on the
 /// registry that we're building packages for.
-fn infer_registry(
+fn get_registry(
     gctx: &GlobalContext,
     pkgs: &[&Package],
     reg_or_index: Option<RegistryOrIndex>,
 ) -> CargoResult<SourceId> {
-    let reg_or_index = match reg_or_index {
-        Some(r) => r,
-        None => {
-            if pkgs[1..].iter().all(|p| p.publish() == pkgs[0].publish()) {
-                // If all packages have the same publish settings, we take that as the default.
-                match pkgs[0].publish().as_deref() {
-                    Some([unique_pkg_reg]) => RegistryOrIndex::Registry(unique_pkg_reg.to_owned()),
-                    None | Some([]) => RegistryOrIndex::Registry(CRATES_IO_REGISTRY.to_owned()),
-                    Some([reg, ..]) if pkgs.len() == 1 => {
-                        // For backwards compatibility, avoid erroring if there's only one package.
-                        // The registry doesn't affect packaging in this case.
-                        RegistryOrIndex::Registry(reg.to_owned())
-                    }
-                    Some(regs) => {
-                        let mut regs: Vec<_> = regs.iter().map(|s| format!("\"{}\"", s)).collect();
-                        regs.sort();
-                        regs.dedup();
-                        // unwrap: the match block ensures that there's more than one reg.
-                        let (last_reg, regs) = regs.split_last().unwrap();
-                        bail!(
-                            "--registry is required to disambiguate between {} or {} registries",
-                            regs.join(", "),
-                            last_reg
-                        )
-                    }
-                }
-            } else {
-                let common_regs = pkgs
-                    .iter()
-                    // `None` means "all registries", so drop them instead of including them
-                    // in the intersection.
-                    .filter_map(|p| p.publish().as_deref())
-                    .map(|p| p.iter().collect::<HashSet<_>>())
-                    .reduce(|xs, ys| xs.intersection(&ys).cloned().collect())
-                    .unwrap_or_default();
-                if common_regs.is_empty() {
-                    bail!("conflicts between `package.publish` fields in the selected packages");
-                } else {
-                    bail!(
-                        "--registry is required because not all `package.publish` settings agree",
-                    );
-                }
-            }
-        }
+    let reg_or_index = match reg_or_index.clone() {
+        Some(r) => Some(r),
+        None => infer_registry(pkgs)?,
     };
 
-    // Validate the registry against the packages' allow-lists. For backwards compatibility, we
-    // skip this if only a single package is being published (because in that case the registry
-    // doesn't affect the packaging step).
-    if pkgs.len() > 1 {
-        if let RegistryOrIndex::Registry(reg_name) = &reg_or_index {
-            for pkg in pkgs {
-                if let Some(allowed) = pkg.publish().as_ref() {
-                    if !allowed.iter().any(|a| a == reg_name) {
-                        bail!(
+    // Validate the registry against the packages' allow-lists.
+    let reg = reg_or_index
+        .clone()
+        .unwrap_or_else(|| RegistryOrIndex::Registry(CRATES_IO_REGISTRY.to_owned()));
+    if let RegistryOrIndex::Registry(reg_name) = reg {
+        for pkg in pkgs {
+            if let Some(allowed) = pkg.publish().as_ref() {
+                if !allowed.iter().any(|a| a == &reg_name) {
+                    bail!(
                         "`{}` cannot be packaged.\n\
                          The registry `{}` is not listed in the `package.publish` value in Cargo.toml.",
                         pkg.name(),
                         reg_name
                     );
-                    }
                 }
             }
         }
     }
-
-    let sid = match reg_or_index {
-        RegistryOrIndex::Index(url) => SourceId::for_registry(&url)?,
-        RegistryOrIndex::Registry(reg) if reg == CRATES_IO_REGISTRY => SourceId::crates_io(gctx)?,
-        RegistryOrIndex::Registry(reg) => SourceId::alt_registry(gctx, &reg)?,
-    };
-
-    // Load source replacements that are built-in to Cargo.
-    let sid = SourceConfigMap::empty(gctx)?
-        .load(sid, &HashSet::new())?
-        .replaced_source_id();
-
-    Ok(sid)
+    Ok(ops::registry::get_source_id(gctx, reg_or_index.as_ref())?.replacement)
 }
 
 /// Packages an entire workspace.
@@ -270,6 +217,28 @@ fn infer_registry(
 /// Returns the generated package files. If `opts.list` is true, skips
 /// generating package files and returns an empty list.
 pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<FileLock>> {
+    Ok(do_package(ws, opts)?.into_iter().map(|x| x.2).collect())
+}
+
+/// Packages an entire workspace.
+///
+/// Returns the generated package files. If `opts.list` is true, skips
+/// generating package files and returns an empty list.
+pub(crate) fn package_with_dep_graph(
+    ws: &Workspace<'_>,
+    opts: &PackageOpts<'_>,
+) -> CargoResult<LocalDependencies<(CliFeatures, FileLock)>> {
+    let output = do_package(ws, opts)?;
+
+    Ok(local_deps(output.into_iter().map(
+        |(pkg, opts, tarball)| (pkg, (opts.cli_features, tarball)),
+    )))
+}
+
+fn do_package<'a>(
+    ws: &Workspace<'_>,
+    opts: &PackageOpts<'a>,
+) -> CargoResult<Vec<(Package, PackageOpts<'a>, FileLock)>> {
     let specs = &opts.to_package.to_package_id_specs(ws)?;
     // If -p is used, we should check spec is matched with the members (See #13719)
     if let ops::Packages::Packages(_) = opts.to_package {
@@ -278,7 +247,11 @@ pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<Fi
             spec.query(member_ids)?;
         }
     }
-    let pkgs = ws.members_with_features(specs, &opts.cli_features)?;
+    let mut pkgs = ws.members_with_features(specs, &opts.cli_features)?;
+
+    // In `members_with_features_old`, it will add "current" package (determined by the cwd)
+    // So we need filter
+    pkgs.retain(|(pkg, _feats)| specs.iter().any(|spec| spec.matches(pkg.package_id())));
 
     if ws.root().join("Cargo.lock").exists() {
         // Make sure the Cargo.lock is up-to-date and valid.
@@ -288,18 +261,34 @@ pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<Fi
         // below, and will be validated during the verification step.
     }
 
+    // TODO: There is some duplication here, getting to `just_pkgs` here and in `publish.rs`.
+    let deps = local_deps(pkgs.iter().map(|(p, f)| ((*p).clone(), f.clone())));
     let just_pkgs: Vec<_> = pkgs.iter().map(|p| p.0).collect();
-    let publish_reg = infer_registry(ws.gctx(), &just_pkgs, opts.reg_or_index.clone())?;
-    debug!("packaging for registry {publish_reg}");
+
+    let sid = match get_registry(ws.gctx(), &just_pkgs, opts.reg_or_index.clone()) {
+        Ok(sid) => {
+            debug!("packaging for registry {}", sid);
+            Some(sid)
+        }
+        Err(e) => {
+            if deps.has_no_dependencies() && opts.reg_or_index.is_none() {
+                // The publish registry doesn't matter unless there are local dependencies,
+                // so ignore any errors if we don't need it. If they explicitly passed a registry
+                // on the CLI, we check it no matter what.
+                None
+            } else {
+                return Err(e);
+            }
+        }
+    };
 
     let mut local_reg = if ws.gctx().cli_unstable().package_workspace {
         let reg_dir = ws.target_dir().join("package").join("tmp-registry");
-        Some(TmpRegistry::new(ws.gctx(), reg_dir, publish_reg)?)
+        sid.map(|sid| TmpRegistry::new(ws.gctx(), reg_dir, sid))
+            .transpose()?
     } else {
         None
     };
-
-    let deps = local_deps(pkgs.iter().map(|(p, f)| ((*p).clone(), f.clone())));
 
     // Packages need to be created in dependency order, because dependencies must
     // be added to our local overlay before we can create lockfiles that depend on them.
@@ -335,24 +324,30 @@ pub fn package(ws: &Workspace<'_>, opts: &PackageOpts<'_>) -> CargoResult<Vec<Fi
         }
     }
 
-    Ok(outputs.into_iter().map(|x| x.2).collect())
+    Ok(outputs)
 }
 
 /// Just the part of the dependency graph that's between the packages we're packaging.
 /// (Is the package name a good key? Does it uniquely identify packages?)
 #[derive(Clone, Debug, Default)]
-struct LocalDependencies {
-    packages: HashMap<PackageId, (Package, CliFeatures)>,
-    graph: Graph<PackageId, ()>,
+pub(crate) struct LocalDependencies<T> {
+    pub packages: HashMap<PackageId, (Package, T)>,
+    pub graph: Graph<PackageId, ()>,
 }
 
-impl LocalDependencies {
-    fn sort(&self) -> Vec<(Package, CliFeatures)> {
+impl<T: Clone> LocalDependencies<T> {
+    pub fn sort(&self) -> Vec<(Package, T)> {
         self.graph
             .sort()
             .into_iter()
             .map(|name| self.packages[&name].clone())
             .collect()
+    }
+
+    pub fn has_no_dependencies(&self) -> bool {
+        self.graph
+            .iter()
+            .all(|node| self.graph.edges(node).next().is_none())
     }
 }
 
@@ -360,9 +355,10 @@ impl LocalDependencies {
 /// ignoring dev dependencies.
 ///
 /// We assume that the packages all belong to this workspace.
-fn local_deps(packages: impl Iterator<Item = (Package, CliFeatures)>) -> LocalDependencies {
-    let packages: HashMap<PackageId, (Package, CliFeatures)> =
-        packages.map(|pkg| (pkg.0.package_id(), pkg)).collect();
+fn local_deps<T>(packages: impl Iterator<Item = (Package, T)>) -> LocalDependencies<T> {
+    let packages: HashMap<PackageId, (Package, T)> = packages
+        .map(|(pkg, payload)| (pkg.package_id(), (pkg, payload)))
+        .collect();
 
     // Dependencies have source ids but not package ids. We draw an edge
     // whenever a dependency's source id matches one of our packages. This is
@@ -374,7 +370,7 @@ fn local_deps(packages: impl Iterator<Item = (Package, CliFeatures)>) -> LocalDe
         .collect();
 
     let mut graph = Graph::new();
-    for (pkg, _features) in packages.values() {
+    for (pkg, _payload) in packages.values() {
         graph.add(pkg.package_id());
         for dep in pkg.dependencies() {
             // Ignore local dev-dependencies because they aren't needed for intra-workspace

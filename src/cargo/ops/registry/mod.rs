@@ -19,7 +19,7 @@ use cargo_credential::{Operation, Secret};
 use crates_io::Registry;
 use url::Url;
 
-use crate::core::{PackageId, SourceId};
+use crate::core::{Package, PackageId, SourceId};
 use crate::sources::source::Source;
 use crate::sources::{RegistrySource, SourceConfigMap};
 use crate::util::auth;
@@ -191,7 +191,7 @@ fn registry(
 ///
 /// The return value is a pair of `SourceId`s: The first may be a built-in replacement of
 /// crates.io (such as index.crates.io), while the second is always the original source.
-fn get_source_id(
+pub(crate) fn get_source_id(
     gctx: &GlobalContext,
     reg_or_index: Option<&RegistryOrIndex>,
 ) -> CargoResult<RegistrySourceIds> {
@@ -321,4 +321,43 @@ pub(crate) struct RegistrySourceIds {
     ///
     /// User-defined source replacement is not applied.
     pub(crate) replacement: SourceId,
+}
+
+/// Determine which registry the packages are for.
+pub(crate) fn infer_registry(pkgs: &[&Package]) -> CargoResult<Option<RegistryOrIndex>> {
+    if pkgs[1..].iter().all(|p| p.publish() == pkgs[0].publish()) {
+        // If all packages have the same publish settings, we take that as the default.
+        match pkgs[0].publish().as_deref() {
+            Some([unique_pkg_reg]) => {
+                Ok(Some(RegistryOrIndex::Registry(unique_pkg_reg.to_owned())))
+            }
+            None | Some([]) => Ok(None),
+            Some(regs) => {
+                let mut regs: Vec<_> = regs.iter().map(|s| format!("\"{}\"", s)).collect();
+                regs.sort();
+                regs.dedup();
+                // unwrap: the match block ensures that there's more than one reg.
+                let (last_reg, regs) = regs.split_last().unwrap();
+                bail!(
+                    "--registry is required to disambiguate between {} or {} registries",
+                    regs.join(", "),
+                    last_reg
+                )
+            }
+        }
+    } else {
+        let common_regs = pkgs
+            .iter()
+            // `None` means "all registries", so drop them instead of including them
+            // in the intersection.
+            .filter_map(|p| p.publish().as_deref())
+            .map(|p| p.iter().collect::<HashSet<_>>())
+            .reduce(|xs, ys| xs.intersection(&ys).cloned().collect())
+            .unwrap_or_default();
+        if common_regs.is_empty() {
+            bail!("conflicts between `package.publish` fields in the selected packages");
+        } else {
+            bail!("--registry is required because not all `package.publish` settings agree",);
+        }
+    }
 }
